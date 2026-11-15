@@ -4,7 +4,7 @@ Aplicación web local (100% offline) diseñada para el control diario de ventas 
 
 ## Características Principales
 
-* **Cierre de Caja:** Cálculo automático de importes (`Litros × Precio por Litro`) para **Super**, **Euro** y **Gasoil**, descuento atómico de stock en tanques y desglose de rendición (**Efectivo**, **Policía**, **Comuna**, **Bomberos**, **Transferencia** y **Otros** con descripción).
+* **Cierre de Caja:** Cálculo automático de importes (`Litros × Precio por Litro`) para **Super**, **Euro** y **Gasoil**, descuento atómico de stock en tanques y desglose de rendición (**Efectivo**, **Policía**, **Comuna**, **Bomberos**, **Cooperativa**, **Transferencia** y **Otros** con descripción).
 * **Comprobantes e Informes PDF:** Emisión automática de comprobante al cerrar caja, historial navegable de los últimos 7 días (con opción de anulación y devolución de stock) e informes mensuales consolidados y por entidad oficial.
 * **Gestión de Tanques y Tarifas:** Reposición de cisternas, ajustes manuales de stock y actualización de precios vigentes por litro.
 * **Funcionamiento Offline y Respaldo:** Base de datos local SQLite en modo WAL con copia de seguridad automática (`caja_backup.db`) al iniciar el sistema.
