@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Estación - Control de Caja y Tanques</title>
+  <script src="libs/tailwind.js"></script>
+  <script src="libs/jspdf.umd.min.js"></script>
+  <script src="libs/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="bg-[#dfe7e3] text-slate-800 font-sans select-none min-h-screen">
+
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
+
+    <!-- ========================================================= -->
+    <!-- 1. PANTALLA PRINCIPAL (MENÚ DE INICIO)                    -->
+    <!-- ========================================================= -->
+    <section id="vista-menu" class="space-y-8 py-4">
+      <header class="bg-[#f2f6f4] border-2 border-emerald-700 rounded-3xl p-6 shadow-sm text-center">
+        <h1 class="text-3xl md:text-4xl font-black text-emerald-900 tracking-tight">SISTEMA DE GESTIÓN DE CAJA Y COMBUSTIBLE</h1>
+        <p class="text-slate-600 font-semibold mt-1 text-lg">Seleccione una operación para comenzar</p>
+      </header>
+
+      <!-- 4 BOTONES PRINCIPALES GIGANTES -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <button onclick="mostrarVista('vista-cerrar-caja')" class="bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-[#f2f6f4] rounded-3xl p-8 shadow-md transition flex flex-col items-center justify-center text-center gap-3 min-h-[180px] border-4 border-emerald-800">
+          <span class="text-4xl font-black tracking-wide">CERRAR CAJA</span>
+          <span class="text-emerald-100 text-lg font-medium">Registrar ventas del turno, descontar litros y emitir comprobante PDF</span>
+        </button>
+
+        <button onclick="mostrarVista('vista-informes-diarios')" class="bg-[#f2f6f4] hover:bg-[#e7efeb] text-emerald-950 rounded-3xl p-8 shadow-sm transition flex flex-col items-center justify-center text-center gap-3 min-h-[180px] border-4 border-emerald-700">
+          <span class="text-4xl font-black tracking-wide text-emerald-800">VER INFORMES DIARIOS</span>
+          <span class="text-slate-600 text-lg font-medium">Consultar cierres de los últimos 7 días por pestaña y descargar PDF</span>
+        </button>
+
+        <button onclick="mostrarVista('vista-informes-mensuales')" class="bg-[#f2f6f4] hover:bg-[#e7efeb] text-emerald-950 rounded-3xl p-8 shadow-sm transition flex flex-col items-center justify-center text-center gap-3 min-h-[180px] border-4 border-emerald-700">
+          <span class="text-4xl font-black tracking-wide text-emerald-800">VER INFORMES MENSUALES</span>
+          <span class="text-slate-600 text-lg font-medium">Consolidado de litros vendidos, recaudación y reporte PDF del mes</span>
+        </button>
+
+        <button onclick="mostrarVista('vista-cargar-tanque')" class="bg-[#f2f6f4] hover:bg-[#e7efeb] text-emerald-950 rounded-3xl p-8 shadow-sm transition flex flex-col items-center justify-center text-center gap-3 min-h-[180px] border-4 border-emerald-700">
+          <span class="text-4xl font-black tracking-wide text-emerald-800">CARGAR TANQUE</span>
+          <span class="text-slate-600 text-lg font-medium">Agregar, restar o modificar stock de litros y actualizar precios</span>
+        </button>
+
+      </div>
+
+      <!-- RESUMEN RÁPIDO DE STOCK EN EL INICIO -->
+      <div class="bg-[#f2f6f4] border-2 border-emerald-700/30 rounded-3xl p-6 shadow-sm">
+        <h2 class="text-lg font-extrabold text-slate-600 uppercase tracking-wider mb-4">Estado Actual de Tanques</h2>
+        <div id="resumen-tanques-inicio" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- 2. VISTA: CERRAR CAJA                                     -->
+    <!-- ========================================================= -->
+    <section id="vista-cerrar-caja" class="hidden space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-4 bg-[#f2f6f4] border-2 border-emerald-700 rounded-2xl p-4 shadow-sm">
+        <button onclick="mostrarVista('vista-menu')" class="bg-[#dce5e0] hover:bg-[#cfd9d4] text-slate-800 font-black py-3 px-6 rounded-xl text-lg transition">
+          ← VOLVER AL MENÚ
+        </button>
+        <h2 class="text-2xl font-black text-emerald-900">CERRAR CAJA</h2>
+        <div class="flex items-center gap-2">
+          <label for="fecha" class="font-bold text-slate-700">FECHA:</label>
+          <input type="date" id="fecha" class="bg-[#e8efec] border-2 border-emerald-700 rounded-xl px-3 py-2 text-lg font-bold text-slate-900">
+        </div>
+      </div>
+
+      <div class="bg-[#f2f6f4] border-2 border-emerald-700/30 rounded-2xl p-6 shadow-sm space-y-6">
+        <!-- 3 COLUMNAS DE COMBUSTIBLES -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- SUPER -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center">
+              <h3 class="text-2xl font-black text-emerald-900 uppercase">Super</h3>
+              <span id="badge_precio_super" class="bg-emerald-700/15 text-emerald-950 font-extrabold px-3 py-1 rounded-lg text-sm">$ 0 / L</span>
+            </div>
+            <p class="text-xs font-bold text-slate-600">Disponible: <span id="disp_stock_super">0 L</span></p>
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros)</label>
+              <input type="number" step="0.01" min="0" id="litros_super" oninput="recalcular()" placeholder="0.00"
+                class="w-full bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-bold text-right text-slate-900">
+            </div>
+            <div class="bg-[#dce6e1] border-2 border-emerald-700/30 rounded-xl p-3 flex justify-between items-center">
+              <span class="text-sm font-bold text-slate-600">VALOR VENTA:</span>
+              <span id="display_valor_super" class="text-2xl font-black text-emerald-900">$ 0.00</span>
+            </div>
+          </div>
+
+          <!-- EURO -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center">
+              <h3 class="text-2xl font-black text-emerald-900 uppercase">Euro</h3>
+              <span id="badge_precio_euro" class="bg-emerald-700/15 text-emerald-950 font-extrabold px-3 py-1 rounded-lg text-sm">$ 0 / L</span>
+            </div>
+            <p class="text-xs font-bold text-slate-600">Disponible: <span id="disp_stock_euro">0 L</span></p>
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros)</label>
+              <input type="number" step="0.01" min="0" id="litros_euro" oninput="recalcular()" placeholder="0.00"
+                class="w-full bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-bold text-right text-slate-900">
+            </div>
+            <div class="bg-[#dce6e1] border-2 border-emerald-700/30 rounded-xl p-3 flex justify-between items-center">
+              <span class="text-sm font-bold text-slate-600">VALOR VENTA:</span>
+              <span id="display_valor_euro" class="text-2xl font-black text-emerald-900">$ 0.00</span>
+            </div>
+          </div>
+
+          <!-- GASOIL -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center">
+              <h3 class="text-2xl font-black text-emerald-900 uppercase">Gasoil</h3>
+              <span id="badge_precio_gasoil" class="bg-emerald-700/15 text-emerald-950 font-extrabold px-3 py-1 rounded-lg text-sm">$ 0 / L</span>
+            </div>
+            <p class="text-xs font-bold text-slate-600">Disponible: <span id="disp_stock_gasoil">0 L</span></p>
+            <div>
+              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros)</label>
+              <input type="number" step="0.01" min="0" id="litros_gasoil" oninput="recalcular()" placeholder="0.00"
+                class="w-full bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-bold text-right text-slate-900">
+            </div>
+            <div class="bg-[#dce6e1] border-2 border-emerald-700/30 rounded-xl p-3 flex justify-between items-center">
+              <span class="text-sm font-bold text-slate-600">VALOR VENTA:</span>
+              <span id="display_valor_gasoil" class="text-2xl font-black text-emerald-900">$ 0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TOTAL VENTA -->
+        <div class="bg-emerald-800 text-[#f2f6f4] rounded-2xl p-5 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span class="text-2xl font-extrabold tracking-wide">TOTAL VENTA:</span>
+          <span id="display_total_venta" class="text-4xl font-black">$ 0.00</span>
+        </div>
+
+        <!-- RENDICIÓN DE VENTAS (UNIFICADA CON DESPLEGABLES + AGREGAR) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start pt-2">
+          
+          <!-- COLUMNA IZQUIERDA (2/3): LISTA DINÁMICA DE MEDIOS DE PAGO -->
+          <div class="lg:col-span-2 bg-[#e6eeea] border-2 border-emerald-700/40 rounded-2xl p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b-2 border-slate-300/60 pb-3">
+              <div>
+                <h3 class="text-xl font-black text-emerald-900">DETALLE DE RENDICIÓN / MEDIOS DE PAGO</h3>
+                <p class="text-xs font-semibold text-slate-600">Seleccione Efectivo, Policía, Transferencia u Otro y agregue su descripción</p>
+              </div>
+              <button type="button" onclick="agregarFilaVenta()"
+                class="bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-[#f2f6f4] font-black py-3 px-6 rounded-xl text-lg shadow-sm transition">
+                Agregar (+)
+              </button>
+            </div>
+
+            <div id="lista-ventas-rendicion" class="space-y-3">
+              <!-- Las filas se agregan dinámicamente aquí -->
+            </div>
+          </div>
+
+          <!-- COLUMNA DERECHA (1/3): TOTAL NORMALIZADO Y ESTADO DE CUADRE -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-6 space-y-4">
+            <div class="text-center border-b-2 border-slate-300/60 pb-3">
+              <span class="text-lg font-extrabold text-slate-700 uppercase block">Total Normalizado</span>
+              <span id="display_total_normalizado" class="text-4xl font-black text-emerald-800 mt-1 block">$ 0.00</span>
+            </div>
+            <div id="estado_cuadre" class="p-4 rounded-xl text-center font-bold text-lg bg-[#d4dfd9] text-slate-700">
+              Ingrese los litros y medios de pago
+            </div>
+          </div>
+
+        </div>
+
+        <button onclick="guardarCierre()" class="w-full bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-[#f2f6f4] font-black text-2xl py-6 px-6 rounded-2xl shadow-md transition">
+          GUARDAR CIERRE Y GENERAR PDF
+        </button>
+      </div>
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- 3. VISTA: INFORMES DIARIOS (ÚLTIMOS 7 DÍAS POR PESTAÑA)   -->
+    <!-- ========================================================= -->
+    <section id="vista-informes-diarios" class="hidden space-y-6">
+      <div class="flex items-center justify-between bg-[#f2f6f4] border-2 border-emerald-700 rounded-2xl p-4 shadow-sm">
+        <button onclick="mostrarVista('vista-menu')" class="bg-[#dce5e0] hover:bg-[#cfd9d4] text-slate-800 font-black py-3 px-6 rounded-xl text-lg transition">
+          ← VOLVER AL MENÚ
+        </button>
+        <h2 class="text-2xl font-black text-emerald-900">INFORMES DIARIOS (ÚLTIMOS 7 DÍAS)</h2>
+        <div class="w-36 hidden sm:block"></div>
+      </div>
+
+      <div id="tabs-dias" class="flex flex-wrap gap-3"></div>
+      <div id="contenido-dia-seleccionado" class="space-y-6"></div>
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- 4. VISTA: INFORMES MENSUALES                              -->
+    <!-- ========================================================= -->
+    <section id="vista-informes-mensuales" class="hidden space-y-6">
+      <div class="flex items-center justify-between bg-[#f2f6f4] border-2 border-emerald-700 rounded-2xl p-4 shadow-sm">
+        <button onclick="mostrarVista('vista-menu')" class="bg-[#dce5e0] hover:bg-[#cfd9d4] text-slate-800 font-black py-3 px-6 rounded-xl text-lg transition">
+          ← VOLVER AL MENÚ
+        </button>
+        <h2 class="text-2xl font-black text-emerald-900">INFORMES MENSUALES</h2>
+        <div class="w-36 hidden sm:block"></div>
+      </div>
+
+      <div class="bg-[#f2f6f4] border-2 border-emerald-700/30 rounded-2xl p-6 shadow-sm space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-slate-300/60 pb-6">
+          <div class="flex items-center gap-4">
+            <label for="mes_informe" class="text-xl font-bold text-slate-700">SELECCIONAR MES:</label>
+            <input type="month" id="mes_informe" onchange="cargarVistaPreviaMensual()" class="bg-[#f7faf8] border-2 border-emerald-700 rounded-xl px-4 py-3 text-xl font-bold">
+          </div>
+          <button onclick="generarInformeMensualPDF()" class="bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black text-xl py-4 px-8 rounded-2xl shadow-md transition">
+            DESCARGAR INFORME MENSUAL PDF
+          </button>
+        </div>
+
+        <div id="preview-mensual" class="space-y-6"></div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================= -->
+    <!-- 5. VISTA: CARGAR / AJUSTAR TANQUE Y PRECIOS               -->
+    <!-- ========================================================= -->
+    <section id="vista-cargar-tanque" class="hidden space-y-6">
+      <div class="flex items-center justify-between bg-[#f2f6f4] border-2 border-emerald-700 rounded-2xl p-4 shadow-sm">
+        <button onclick="mostrarVista('vista-menu')" class="bg-[#dce5e0] hover:bg-[#cfd9d4] text-slate-800 font-black py-3 px-6 rounded-xl text-lg transition">
+          ← VOLVER AL MENÚ
+        </button>
+        <h2 class="text-2xl font-black text-emerald-900">GESTIÓN DE TANQUES Y PRECIOS</h2>
+        <div class="w-36 hidden sm:block"></div>
+      </div>
+
+      <div id="panel-gestion-tanques" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+
+      <!-- SECCIÓN PARA ACTUALIZAR PRECIOS POR LITRO -->
+      <div class="bg-[#f2f6f4] border-2 border-emerald-700 rounded-2xl p-6 shadow-sm space-y-4">
+        <h3 class="text-2xl font-black text-emerald-900">PRECIOS VIGENTES POR LITRO ($)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Super ($ / Litro):</label>
+            <input type="number" id="input_precio_super" min="0.01" step="0.01" class="w-full bg-[#f7faf8] border-2 border-slate-400 rounded-xl p-3 text-2xl font-bold text-right">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Euro ($ / Litro):</label>
+            <input type="number" id="input_precio_euro" min="0.01" step="0.01" class="w-full bg-[#f7faf8] border-2 border-slate-400 rounded-xl p-3 text-2xl font-bold text-right">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Gasoil ($ / Litro):</label>
+            <input type="number" id="input_precio_gasoil" min="0.01" step="0.01" class="w-full bg-[#f7faf8] border-2 border-slate-400 rounded-xl p-3 text-2xl font-bold text-right">
+          </div>
+        </div>
+        <button onclick="guardarPrecios()" class="w-full md:w-auto bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black text-xl py-4 px-8 rounded-2xl transition">
+          GUARDAR NUEVOS PRECIOS
+        </button>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

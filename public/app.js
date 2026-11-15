@@ -1,0 +1,800 @@
+const { jsPDF } = window.jspdf;
+
+let tanquesActuales = [];
+let precios = { Super: 0, Euro: 0, Gasoil: 0 };
+let cierresUltimos7Dias = [];
+let diaActivoTab = null;
+let contadorFilasVenta = 0;
+let guardandoCierre = false;
+
+window.addEventListener('DOMContentLoaded', async () => {
+  const hoy = new Date();
+  const yyyy = hoy.getFullYear();
+  const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+  const dd = String(hoy.getDate()).padStart(2, '0');
+
+  document.getElementById('fecha').value = `${yyyy}-${mm}-${dd}`;
+  document.getElementById('mes_informe').value = `${yyyy}-${mm}`;
+
+  agregarFilaVenta('Efectivo');
+
+  await cargarTanques();
+  mostrarVista('vista-menu');
+});
+
+// ==========================================
+// NAVEGACIÓN ENTRE VISTAS
+// ==========================================
+async function mostrarVista(idVista) {
+  const vistas = [
+    'vista-menu',
+    'vista-cerrar-caja',
+    'vista-informes-diarios',
+    'vista-informes-mensuales',
+    'vista-cargar-tanque'
+  ];
+
+  vistas.forEach(v => document.getElementById(v).classList.add('hidden'));
+  document.getElementById(idVista).classList.remove('hidden');
+
+  if (idVista === 'vista-menu' || idVista === 'vista-cerrar-caja' || idVista === 'vista-cargar-tanque') {
+    await cargarTanques();
+  }
+  if (idVista === 'vista-informes-diarios') {
+    await cargarInformesDiarios();
+  }
+  if (idVista === 'vista-informes-mensuales') {
+    await cargarVistaPreviaMensual();
+  }
+}
+
+function val(id) {
+  const el = document.getElementById(id);
+  if (!el) return 0;
+  const num = parseFloat(el.value) || 0;
+  if (num < 0) {
+    el.value = 0;
+    return 0;
+  }
+  return num;
+}
+
+function escaparHTML(texto) {
+  return String(texto || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatoMoneda(num) {
+  return `$ ${Number(num || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// ==========================================
+// GESTIÓN DE TANQUES Y PRECIOS
+// ==========================================
+async function cargarTanques() {
+  const res = await fetch('/api/tanques');
+  tanquesActuales = await res.json();
+
+  tanquesActuales.forEach(t => {
+    precios[t.combustible] = t.precio_litro;
+  });
+
+  // 1. Resumen en Menú Principal
+  const contInicio = document.getElementById('resumen-tanques-inicio');
+  if (contInicio) {
+    contInicio.innerHTML = tanquesActuales.map(t => {
+      const bajo = t.litros_disponibles < 2000;
+      return `
+        <div class="p-4 rounded-2xl border-2 ${bajo ? 'border-amber-600 bg-amber-100/80' : 'border-emerald-700/40 bg-[#e6eeea]'} flex justify-between items-center">
+          <div>
+            <span class="text-sm font-extrabold uppercase text-slate-600">${t.combustible}</span>
+            <p class="text-3xl font-black ${bajo ? 'text-amber-800' : 'text-emerald-900'}">
+              ${t.litros_disponibles.toLocaleString('es-AR', { minimumFractionDigits: 1 })} L
+            </p>
+          </div>
+          <span class="text-sm font-bold text-slate-700">${formatoMoneda(t.precio_litro)}/L</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 2. Etiquetas en Cerrar Caja
+  const stockMap = Object.fromEntries(tanquesActuales.map(t => [t.combustible, t.litros_disponibles]));
+  document.getElementById('badge_precio_super').textContent = `${formatoMoneda(precios.Super)} / L`;
+  document.getElementById('badge_precio_euro').textContent = `${formatoMoneda(precios.Euro)} / L`;
+  document.getElementById('badge_precio_gasoil').textContent = `${formatoMoneda(precios.Gasoil)} / L`;
+
+  document.getElementById('disp_stock_super').textContent = `${(stockMap['Super'] || 0).toLocaleString('es-AR')} L`;
+  document.getElementById('disp_stock_euro').textContent = `${(stockMap['Euro'] || 0).toLocaleString('es-AR')} L`;
+  document.getElementById('disp_stock_gasoil').textContent = `${(stockMap['Gasoil'] || 0).toLocaleString('es-AR')} L`;
+
+  // 3. Tarjetas en Vista Cargar Tanque
+  const panelGestion = document.getElementById('panel-gestion-tanques');
+  if (panelGestion) {
+    panelGestion.innerHTML = tanquesActuales.map(t => `
+      <div class="bg-[#f2f6f4] border-2 border-emerald-700 rounded-2xl p-6 shadow-sm space-y-4">
+        <div class="text-center border-b-2 border-slate-300/60 pb-3">
+          <h3 class="text-2xl font-black text-emerald-900 uppercase">${t.combustible}</h3>
+          <p class="text-sm font-bold text-slate-600 mt-1">Stock actual en tanque:</p>
+          <p class="text-4xl font-black text-slate-900 mt-1">${t.litros_disponibles.toLocaleString('es-AR', { minimumFractionDigits: 1 })} L</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">Cantidad de Litros:</label>
+          <input type="number" id="ajuste_litros_${t.combustible}" min="0" step="0.01" placeholder="0.00"
+            class="w-full bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-bold text-right">
+        </div>
+
+        <div class="grid grid-cols-1 gap-2 pt-1">
+          <button onclick="ajustarTanque('${t.combustible}', 'agregar')" class="bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black py-3 px-4 rounded-xl text-lg transition">
+            + AGREGAR LITROS
+          </button>
+          <button onclick="ajustarTanque('${t.combustible}', 'restar')" class="bg-amber-700 hover:bg-amber-800 text-[#f2f6f4] font-black py-3 px-4 rounded-xl text-lg transition">
+            - RESTAR LITROS
+          </button>
+          <button onclick="ajustarTanque('${t.combustible}', 'modificar')" class="bg-slate-700 hover:bg-slate-800 text-[#f2f6f4] font-black py-3 px-4 rounded-xl text-lg transition">
+            = FIJAR STOCK EXACTO
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('input_precio_super').value = precios.Super;
+  document.getElementById('input_precio_euro').value = precios.Euro;
+  document.getElementById('input_precio_gasoil').value = precios.Gasoil;
+
+  recalcular();
+}
+
+async function ajustarTanque(combustible, operacion) {
+  const input = document.getElementById(`ajuste_litros_${combustible}`);
+  const litros = parseFloat(input.value);
+
+  if (isNaN(litros) || litros < 0 || (operacion !== 'modificar' && litros === 0)) {
+    return alert('Ingrese una cantidad de litros válida mayor a 0.');
+  }
+
+  if (operacion === 'modificar' && !confirm(`¿Seguro que desea fijar el stock total de ${combustible} en ${litros} L?`)) {
+    return;
+  }
+
+  const res = await fetch('/api/tanques/ajustar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ combustible, operacion, litros })
+  });
+
+  if (res.ok) {
+    input.value = '';
+    await cargarTanques();
+  } else {
+    const err = await res.json();
+    alert(err.error || 'Error al actualizar tanque');
+  }
+}
+
+async function guardarPrecios() {
+  const Super = parseFloat(document.getElementById('input_precio_super').value);
+  const Euro = parseFloat(document.getElementById('input_precio_euro').value);
+  const Gasoil = parseFloat(document.getElementById('input_precio_gasoil').value);
+
+  if (!Super || !Euro || !Gasoil || Super <= 0 || Euro <= 0 || Gasoil <= 0) {
+    return alert('Ingrese precios válidos mayores a 0.');
+  }
+
+  await fetch('/api/tanques/precios', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Super, Euro, Gasoil })
+  });
+
+  await cargarTanques();
+  alert('Precios actualizados correctamente.');
+}
+
+// ==========================================
+// FILAS DINÁMICAS DE RENDICIÓN
+// ==========================================
+function agregarFilaVenta(tipoPorDefecto = 'Efectivo') {
+  contadorFilasVenta++;
+  const idFila = `fila-venta-${contadorFilasVenta}`;
+  const contenedor = document.getElementById('lista-ventas-rendicion');
+
+  const fila = document.createElement('div');
+  fila.id = idFila;
+  fila.className = 'bg-[#f2f6f4] border-2 border-emerald-700/40 rounded-xl p-4 space-y-3 shadow-sm overflow-hidden';
+
+  fila.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <select onchange="onCambiarTipoVenta('${idFila}')"
+        class="venta-select flex-1 min-w-[160px] bg-[#f7faf8] border-2 border-emerald-700 rounded-xl px-4 py-3 text-lg font-extrabold text-emerald-950 focus:outline-none">
+        <option value="Efectivo" ${tipoPorDefecto === 'Efectivo' ? 'selected' : ''}>Efectivo</option>
+        <option value="Policía" ${tipoPorDefecto === 'Policía' ? 'selected' : ''}>Policía</option>
+        <option value="Comuna" ${tipoPorDefecto === 'Comuna' ? 'selected' : ''}>Comuna</option>
+        <option value="Bomberos" ${tipoPorDefecto === 'Bomberos' ? 'selected' : ''}>Bomberos</option>
+        <option value="Transferencia" ${tipoPorDefecto === 'Transferencia' ? 'selected' : ''}>Transferencia</option>
+        <option value="Otro" ${tipoPorDefecto === 'Otro' ? 'selected' : ''}>Otro</option>
+      </select>
+
+      <div class="flex items-center gap-2">
+        <span class="text-xl font-black text-slate-600">$</span>
+        <input type="number" step="0.01" min="0" placeholder="0.00" oninput="recalcular()"
+          class="venta-monto w-36 sm:w-44 bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-black text-right text-slate-900">
+        <button type="button" onclick="eliminarFilaVenta('${idFila}')"
+          class="bg-red-700 hover:bg-red-800 text-white font-black px-4 py-3 rounded-xl text-lg transition shrink-0" title="Eliminar fila">
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <input type="text" placeholder="Nombre del concepto (ej: Cuenta Corriente, Mercado Pago, Vale...)"
+      class="venta-otro-nombre ${tipoPorDefecto === 'Otro' ? '' : 'hidden'} w-full bg-[#f7faf8] border-2 border-emerald-700/60 focus:border-emerald-700 focus:outline-none rounded-xl px-4 py-2.5 text-base font-bold text-slate-900">
+
+    <input type="text" placeholder="Pequeña descripción (opcional: móvil, patente, chofer, N° vale...)"
+      class="venta-desc w-full bg-[#f7faf8] border border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl px-4 py-2 text-base font-medium text-slate-700">
+  `;
+
+  contenedor.appendChild(fila);
+}
+
+function onCambiarTipoVenta(idFila) {
+  const fila = document.getElementById(idFila);
+  if (!fila) return;
+  const select = fila.querySelector('.venta-select');
+  const inputOtroNombre = fila.querySelector('.venta-otro-nombre');
+
+  if (select.value === 'Otro') {
+    inputOtroNombre.classList.remove('hidden');
+    inputOtroNombre.focus();
+  } else {
+    inputOtroNombre.classList.add('hidden');
+    inputOtroNombre.value = '';
+  }
+}
+
+function eliminarFilaVenta(idFila) {
+  const fila = document.getElementById(idFila);
+  if (fila) fila.remove();
+
+  if (document.querySelectorAll('#lista-ventas-rendicion > div').length === 0) {
+    agregarFilaVenta('Efectivo');
+  }
+  recalcular();
+}
+
+function obtenerDetalleRendicion() {
+  const filas = document.querySelectorAll('#lista-ventas-rendicion > div');
+  let efectivo = 0;
+  let policia = 0;
+  let comuna = 0;
+  let bomberos = 0;
+  let transferencia = 0;
+  let otro = 0;
+  const itemsDetallados = [];
+
+  filas.forEach(f => {
+    const categoria = f.querySelector('.venta-select').value;
+    const nombrePersonalizado = f.querySelector('.venta-otro-nombre').value.trim();
+    const inputMonto = f.querySelector('.venta-monto');
+    let monto = parseFloat(inputMonto.value) || 0;
+    if (monto < 0) {
+      monto = 0;
+      inputMonto.value = 0;
+    }
+    const descripcion = f.querySelector('.venta-desc').value.trim();
+
+    if (monto > 0 || descripcion !== '' || nombrePersonalizado !== '') {
+      const etiqueta = (categoria === 'Otro' && nombrePersonalizado) ? nombrePersonalizado : categoria;
+
+      if (categoria === 'Efectivo') efectivo += monto;
+      else if (categoria === 'Policía') policia += monto;
+      else if (categoria === 'Comuna') comuna += monto;
+      else if (categoria === 'Bomberos') bomberos += monto;
+      else if (categoria === 'Transferencia') transferencia += monto;
+      else otro += monto;
+
+      itemsDetallados.push({
+        categoria,
+        tipo: etiqueta,
+        monto: Number(monto.toFixed(2)),
+        descripcion
+      });
+    }
+  });
+
+  return {
+    efectivo: Number(efectivo.toFixed(2)),
+    policia: Number(policia.toFixed(2)),
+    comuna: Number(comuna.toFixed(2)),
+    bomberos: Number(bomberos.toFixed(2)),
+    transferencia: Number(transferencia.toFixed(2)),
+    otro: Number(otro.toFixed(2)),
+    itemsDetallados
+  };
+}
+
+// ==========================================
+// CERRAR CAJA Y CÁLCULOS
+// ==========================================
+function calcularValoresVenta() {
+  const lSuper = val('litros_super');
+  const lEuro = val('litros_euro');
+  const lGasoil = val('litros_gasoil');
+
+  const vSuper = Number((lSuper * precios.Super).toFixed(2));
+  const vEuro = Number((lEuro * precios.Euro).toFixed(2));
+  const vGasoil = Number((lGasoil * precios.Gasoil).toFixed(2));
+
+  return { lSuper, vSuper, lEuro, vEuro, lGasoil, vGasoil };
+}
+
+function recalcular() {
+  const { vSuper, vEuro, vGasoil } = calcularValoresVenta();
+
+  document.getElementById('display_valor_super').textContent = formatoMoneda(vSuper);
+  document.getElementById('display_valor_euro').textContent = formatoMoneda(vEuro);
+  document.getElementById('display_valor_gasoil').textContent = formatoMoneda(vGasoil);
+
+  const totalVenta = Number((vSuper + vEuro + vGasoil).toFixed(2));
+  const r = obtenerDetalleRendicion();
+  const totalNormalizado = Number((r.efectivo + r.policia + r.comuna + r.bomberos + r.transferencia + r.otro).toFixed(2));
+
+  document.getElementById('display_total_venta').textContent = formatoMoneda(totalVenta);
+  document.getElementById('display_total_normalizado').textContent = formatoMoneda(totalNormalizado);
+
+  const estadoDiv = document.getElementById('estado_cuadre');
+  const diferencia = Math.abs(totalVenta - totalNormalizado);
+
+  if (totalVenta === 0 && totalNormalizado === 0) {
+    estadoDiv.className = 'p-4 rounded-xl text-center font-bold text-lg bg-[#d4dfd9] text-slate-700';
+    estadoDiv.textContent = 'Ingrese los litros y medios de pago';
+  } else if (diferencia < 0.01) {
+    estadoDiv.className = 'p-4 rounded-xl text-center font-extrabold text-lg bg-emerald-200/80 text-emerald-950 border-2 border-emerald-700';
+    estadoDiv.textContent = 'CAJA CUADRADA CORRECTAMENTE';
+  } else {
+    const diffReal = totalNormalizado - totalVenta;
+    const signo = diffReal > 0 ? '+' : '';
+    estadoDiv.className = 'p-4 rounded-xl text-center font-extrabold text-lg bg-amber-200/80 text-amber-950 border-2 border-amber-600';
+    estadoDiv.textContent = `DIFERENCIA DE CAJA: ${signo}${formatoMoneda(diffReal)}`;
+  }
+}
+
+async function guardarCierre() {
+  if (guardandoCierre) return;
+
+  const { lSuper, vSuper, lEuro, vEuro, lGasoil, vGasoil } = calcularValoresVenta();
+  const totalVenta = Number((vSuper + vEuro + vGasoil).toFixed(2));
+  const r = obtenerDetalleRendicion();
+  const totalNormalizado = Number((r.efectivo + r.policia + r.comuna + r.bomberos + r.transferencia + r.otro).toFixed(2));
+
+  const datos = {
+    fecha: document.getElementById('fecha').value,
+    litros_super: lSuper,
+    valor_super: vSuper,
+    litros_euro: lEuro,
+    valor_euro: vEuro,
+    litros_gasoil: lGasoil,
+    valor_gasoil: vGasoil,
+    total_venta: totalVenta,
+    efectivo: r.efectivo,
+    policia: r.policia,
+    comuna: r.comuna,
+    bomberos: r.bomberos,
+    transferencia: r.transferencia,
+    otro: r.otro,
+    medios_extra: r.itemsDetallados,
+    total_normalizado: totalNormalizado
+  };
+
+  if (!datos.fecha) return alert('Seleccione una fecha válida.');
+  if (datos.total_venta <= 0) return alert('Debe ingresar al menos una venta en litros antes de cerrar.');
+
+  const diferencia = Math.abs(totalVenta - totalNormalizado);
+  if (diferencia >= 0.01) {
+    const confirmarDiff = confirm(`Atención: Hay una diferencia entre el Total Venta (${formatoMoneda(totalVenta)}) y el Total Normalizado (${formatoMoneda(totalNormalizado)}).\n\n¿Desea guardar el cierre de todas formas?`);
+    if (!confirmarDiff) return;
+  }
+
+  try {
+    guardandoCierre = true;
+    const res = await fetch('/api/cierres', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos)
+    });
+
+    const resultado = await res.json();
+    if (!res.ok) {
+      return alert(`Error: ${resultado.error}`);
+    }
+
+    generarComprobantePDF(datos, resultado.id);
+
+    await cargarTanques();
+    ['litros_super', 'litros_euro', 'litros_gasoil'].forEach(id => document.getElementById(id).value = '');
+
+    document.getElementById('lista-ventas-rendicion').innerHTML = '';
+    agregarFilaVenta('Efectivo');
+    recalcular();
+  } finally {
+    guardandoCierre = false;
+  }
+}
+
+// ==========================================
+// INFORMES DIARIOS (ÚLTIMOS 7 DÍAS + ANULAR)
+// ==========================================
+async function cargarInformesDiarios() {
+  const res = await fetch(`/api/cierres/ultimos-7-dias?t=${Date.now()}`, { cache: 'no-store' });
+  cierresUltimos7Dias = await res.json();
+
+  const tabsCont = document.getElementById('tabs-dias');
+  const contenidoCont = document.getElementById('contenido-dia-seleccionado');
+
+  if (cierresUltimos7Dias.length === 0) {
+    diaActivoTab = null;
+    tabsCont.innerHTML = '';
+    contenidoCont.innerHTML = `
+      <div class="bg-[#f2f6f4] border-2 border-emerald-700/30 rounded-2xl p-10 text-center text-slate-600 text-xl font-bold">
+        Aún no hay cierres de caja registrados.
+      </div>
+    `;
+    return;
+  }
+
+  const fechasUnicas = [...new Set(cierresUltimos7Dias.map(c => c.fecha))];
+  if (!diaActivoTab || !fechasUnicas.includes(diaActivoTab)) {
+    diaActivoTab = fechasUnicas[0];
+  }
+
+  tabsCont.innerHTML = fechasUnicas.map(fecha => {
+    const activa = fecha === diaActivoTab;
+    return `
+      <button onclick="seleccionarDiaTab('${fecha}')"
+        class="py-4 px-6 rounded-2xl font-black text-lg transition border-2 ${
+          activa
+            ? 'bg-emerald-700 text-[#f2f6f4] border-emerald-800 shadow-md'
+            : 'bg-[#f2f6f4] text-emerald-900 border-emerald-700 hover:bg-[#e6eeea]'
+        }">
+        ${fecha}
+      </button>
+    `;
+  }).join('');
+
+  renderizarDetalleDia(diaActivoTab);
+}
+
+function seleccionarDiaTab(fecha) {
+  diaActivoTab = fecha;
+  cargarInformesDiarios();
+}
+
+function descargarPDFPorId(idCierre) {
+  const cierre = cierresUltimos7Dias.find(c => c.id === idCierre);
+  if (cierre) generarComprobantePDF(cierre, cierre.id);
+}
+
+async function anularCierre(idCierre) {
+  if (!confirm(`¿Seguro que desea ANULAR el Comprobante #${idCierre}?\n\nLos litros vendidos volverán a sumarse automáticamente a los tanques.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/cierres/${idCierre}/anular`, { method: 'POST' });
+    const texto = await res.text();
+    let data = {};
+    try { data = JSON.parse(texto); } catch (_) {}
+
+    if (!res.ok) {
+      return alert(data.error || `Error del servidor (${res.status}). Asegúrese de reiniciar node server.js.`);
+    }
+
+    await cargarTanques();
+    await cargarInformesDiarios();
+  } catch (err) {
+    alert('Error de conexión al intentar anular el cierre: ' + err.message);
+  }
+}
+
+function renderizarDetalleDia(fecha) {
+  const cierresDelDia = cierresUltimos7Dias.filter(c => c.fecha === fecha);
+  const contenidoCont = document.getElementById('contenido-dia-seleccionado');
+
+  contenidoCont.innerHTML = cierresDelDia.map(c => {
+    const items = c.medios_extra || [];
+    const desgloseHtml = items.length > 0
+      ? items.map(item => `
+          <div class="flex justify-between items-start border-b border-slate-300 pb-1">
+            <div>
+              <span>${escaparHTML(item.tipo)}:</span>
+              ${item.descripcion ? `<span class="block text-xs font-normal text-slate-600">${escaparHTML(item.descripcion)}</span>` : ''}
+            </div>
+            <span>${formatoMoneda(item.monto)}</span>
+          </div>
+        `).join('')
+      : `
+          <div class="flex justify-between border-b border-slate-300 pb-1"><span>Efectivo:</span><span>${formatoMoneda(c.efectivo)}</span></div>
+          <div class="flex justify-between border-b border-slate-300 pb-1"><span>Policía:</span><span>${formatoMoneda(c.policia)}</span></div>
+          <div class="flex justify-between border-b border-slate-300 pb-1"><span>Comuna:</span><span>${formatoMoneda(c.comuna)}</span></div>
+          <div class="flex justify-between border-b border-slate-300 pb-1"><span>Bomberos:</span><span>${formatoMoneda(c.bomberos)}</span></div>
+          <div class="flex justify-between border-b border-slate-300 pb-1"><span>Transferencia:</span><span>${formatoMoneda(c.transferencia)}</span></div>
+          <div class="flex justify-between"><span>Otro:</span><span>${formatoMoneda(c.otro)}</span></div>
+        `;
+
+    return `
+      <div class="bg-[#f2f6f4] border-2 border-emerald-700 rounded-2xl p-6 shadow-sm space-y-6">
+        <div class="flex flex-wrap justify-between items-center gap-4 border-b-2 border-slate-300/60 pb-4">
+          <div>
+            <span class="text-sm font-bold text-slate-600 uppercase">Comprobante #${c.id}</span>
+            <h3 class="text-2xl font-black text-emerald-900">Fecha: ${c.fecha}</h3>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <button onclick="descargarPDFPorId(${c.id})"
+              class="bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black py-3 px-6 rounded-xl text-lg transition">
+              DESCARGAR PDF
+            </button>
+            <button onclick="anularCierre(${c.id})"
+              class="bg-red-700 hover:bg-red-800 text-[#f2f6f4] font-black py-3 px-5 rounded-xl text-lg transition">
+              ANULAR CIERRE
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-xl p-4 text-center">
+            <h4 class="text-xl font-black text-emerald-900">Super</h4>
+            <p class="text-slate-700 font-bold mt-2">L. venta: ${c.litros_super.toFixed(2)} L</p>
+            <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(c.valor_super)}</p>
+          </div>
+          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-xl p-4 text-center">
+            <h4 class="text-xl font-black text-emerald-900">Euro</h4>
+            <p class="text-slate-700 font-bold mt-2">L. venta: ${c.litros_euro.toFixed(2)} L</p>
+            <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(c.valor_euro)}</p>
+          </div>
+          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-xl p-4 text-center">
+            <h4 class="text-xl font-black text-emerald-900">Gasoil</h4>
+            <p class="text-slate-700 font-bold mt-2">L. venta: ${c.litros_gasoil.toFixed(2)} L</p>
+            <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(c.valor_gasoil)}</p>
+          </div>
+        </div>
+
+        <div class="bg-emerald-800 text-[#f2f6f4] rounded-xl p-4 flex justify-between items-center">
+          <span class="text-xl font-extrabold">TOTAL VENTA:</span>
+          <span class="text-3xl font-black">${formatoMoneda(c.total_venta)}</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+          <div class="space-y-2 text-lg font-bold text-slate-700">
+            ${desgloseHtml}
+          </div>
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-xl p-5 text-center">
+            <span class="text-sm font-extrabold text-slate-600 uppercase">Total Normalizado</span>
+            <p class="text-3xl font-black text-emerald-800 mt-1">${formatoMoneda(c.total_normalizado)}</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ==========================================
+// INFORMES MENSUALES (VISTA PREVIA + PDF GENERAL Y POR ENTIDAD)
+// ==========================================
+let ultimoInformeMensualCargado = null;
+
+async function cargarVistaPreviaMensual() {
+  const mes = document.getElementById('mes_informe').value;
+  const cont = document.getElementById('preview-mensual');
+  if (!mes) return;
+
+  const res = await fetch(`/api/informes/${mes}?t=${Date.now()}`, { cache: 'no-store' });
+  const data = await res.json();
+  ultimoInformeMensualCargado = data;
+
+  if (data.cierres.length === 0) {
+    cont.innerHTML = `<p class="text-center text-slate-600 font-bold text-xl py-8">No hay cierres registrados en ${mes}.</p>`;
+    return;
+  }
+
+  const r = data.resumen;
+  cont.innerHTML = `
+    <div class="space-y-6">
+      <!-- Totales por Combustible -->
+      <div>
+        <h3 class="text-sm font-extrabold text-slate-600 uppercase tracking-wider mb-3">Ventas por Combustible (${r.cantidad_cierres} cierres)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4">
+            <span class="text-xs font-extrabold text-emerald-900 uppercase">Super Vendido</span>
+            <p class="text-2xl font-black text-slate-900">${r.litros_super.toFixed(1)} L</p>
+            <p class="text-sm font-bold text-emerald-800">${formatoMoneda(r.valor_super)}</p>
+          </div>
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4">
+            <span class="text-xs font-extrabold text-emerald-900 uppercase">Euro Vendido</span>
+            <p class="text-2xl font-black text-slate-900">${r.litros_euro.toFixed(1)} L</p>
+            <p class="text-sm font-bold text-emerald-800">${formatoMoneda(r.valor_euro)}</p>
+          </div>
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4">
+            <span class="text-xs font-extrabold text-emerald-900 uppercase">Gasoil Vendido</span>
+            <p class="text-2xl font-black text-slate-900">${r.litros_gasoil.toFixed(1)} L</p>
+            <p class="text-sm font-bold text-emerald-800">${formatoMoneda(r.valor_gasoil)}</p>
+          </div>
+          <div class="bg-emerald-800 text-[#f2f6f4] rounded-2xl p-4">
+            <span class="text-xs font-extrabold text-emerald-200 uppercase">Total Venta Combustible</span>
+            <p class="text-2xl font-black mt-1">${formatoMoneda(r.total_venta)}</p>
+            <p class="text-xs text-emerald-100 mt-1">Normalizado: ${formatoMoneda(r.total_normalizado)}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Totales Mensuales por Medio / Entidad con descarga individual -->
+      <div>
+        <h3 class="text-sm font-extrabold text-slate-600 uppercase tracking-wider mb-3">Resumen Mensual por Medio de Pago y Liquidación por Entidad</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          
+          <!-- POLICÍA (Con botón PDF individual) -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div>
+              <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Policía</span>
+              <p class="text-2xl font-black text-emerald-950 mt-1">${formatoMoneda(r.policia)}</p>
+            </div>
+            <button onclick="generarPDFEntidadMensual('Policía')"
+              class="w-full bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black py-2.5 px-4 rounded-xl text-sm transition">
+              DESCARGAR PDF POLICÍA
+            </button>
+          </div>
+
+          <!-- COMUNA (Con botón PDF individual) -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div>
+              <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Comuna</span>
+              <p class="text-2xl font-black text-emerald-950 mt-1">${formatoMoneda(r.comuna)}</p>
+            </div>
+            <button onclick="generarPDFEntidadMensual('Comuna')"
+              class="w-full bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black py-2.5 px-4 rounded-xl text-sm transition">
+              DESCARGAR PDF COMUNA
+            </button>
+          </div>
+
+          <!-- BOMBEROS (Con botón PDF individual) -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div>
+              <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Bomberos</span>
+              <p class="text-2xl font-black text-emerald-950 mt-1">${formatoMoneda(r.bomberos)}</p>
+            </div>
+            <button onclick="generarPDFEntidadMensual('Bomberos')"
+              class="w-full bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black py-2.5 px-4 rounded-xl text-sm transition">
+              DESCARGAR PDF BOMBEROS
+            </button>
+          </div>
+
+          <!-- Otros medios generales -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-2xl p-4">
+            <span class="text-xs font-extrabold text-slate-600 uppercase">Efectivo Mensual</span>
+            <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(r.efectivo)}</p>
+          </div>
+
+          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-2xl p-4">
+            <span class="text-xs font-extrabold text-slate-600 uppercase">Transferencia Mensual</span>
+            <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(r.transferencia)}</p>
+          </div>
+
+          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div>
+              <span class="text-xs font-extrabold text-slate-600 uppercase">Otros Conceptos Mensual</span>
+              <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(r.otro)}</p>
+            </div>
+            <button onclick="generarPDFEntidadMensual('Otro')"
+              class="w-full bg-slate-700 hover:bg-slate-800 text-[#f2f6f4] font-black py-2 px-4 rounded-xl text-xs transition">
+              DESCARGAR DETALLE OTROS
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ==========================================
+// PDF INDIVIDUAL DE LIQUIDACIÓN POR ENTIDAD (POLICÍA / COMUNA / BOMBEROS)
+// ==========================================
+async function generarPDFEntidadMensual(entidad) {
+  const mes = document.getElementById('mes_informe').value;
+  if (!mes) return alert('Seleccione un mes.');
+
+  const res = await fetch(`/api/informes/${mes}?t=${Date.now()}`, { cache: 'no-store' });
+  const data = await res.json();
+
+  const filasEntidad = [];
+  let totalEntidad = 0;
+
+  data.cierres.forEach(c => {
+    const items = (c.medios_extra || []).filter(item => item.categoria === entidad);
+
+    if (items.length > 0) {
+      items.forEach(item => {
+        totalEntidad += Number(item.monto || 0);
+        filasEntidad.push([
+          c.fecha,
+          `Comprobante #${c.id}`,
+          item.tipo,
+          item.descripcion || 'Sin detalle especificado',
+          formatoMoneda(item.monto)
+        ]);
+      });
+    } else {
+      // Compatibilidad con cierres viejos que no tenían array medios_extra
+      const campoMapa = { 'Policía': c.policia, 'Comuna': c.comuna, 'Bomberos': c.bomberos, 'Otro': c.otro };
+      const montoDirecto = Number(campoMapa[entidad] || 0);
+      if (montoDirecto > 0) {
+        totalEntidad += montoDirecto;
+        filasEntidad.push([
+          c.fecha,
+          `Comprobante #${c.id}`,
+          entidad,
+          '-',
+          formatoMoneda(montoDirecto)
+        ]);
+      }
+    }
+  });
+
+  if (filasEntidad.length === 0) {
+    return alert(`No se registraron consumos para "${entidad}" en el período ${mes}.`);
+  }
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // Encabezado SC Estevez
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(21, 128, 61);
+  doc.text('SC Estevez', 14, 18);
+
+  doc.setFontSize(14);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`LIQUIDACIÓN MENSUAL DE CUENTA CORRIENTE: ${entidad.toUpperCase()}`, 14, 27);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Período liquidado: ${mes}   |   Cantidad de registros: ${filasEntidad.length}`, 14, 34);
+
+  // Tabla detallada de vales / cargas de esa entidad
+  doc.autoTable({
+    startY: 40,
+    head: [['Fecha', 'N° Cierre', 'Concepto', 'Detalle / Móvil / Patente', 'Importe ($)']],
+    body: [
+      ...filasEntidad,
+      ['', '', '', 'TOTAL A ABONAR', formatoMoneda(totalEntidad)]
+    ],
+    theme: 'grid',
+    styles: { fontSize: 10, cellPadding: 3 },
+    headStyles: { fillColor: [21, 128, 61] },
+    didParseCell: function (hookData) {
+      if (hookData.row.index === filasEntidad.length) {
+        hookData.cell.styles.fontStyle = 'bold';
+        hookData.cell.styles.fillColor = [230, 238, 234];
+        hookData.cell.styles.textColor = [21, 128, 61];
+      }
+    }
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 25;
+  if (finalY < 270) {
+    doc.setDrawColor(148, 163, 184);
+    doc.line(30, finalY, 90, finalY);
+    doc.line(120, finalY, 180, finalY);
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Firma y Sello SC Estevez', 60, finalY + 5, { align: 'center' });
+    doc.text(`Conformidad ${entidad}`, 150, finalY + 5, { align: 'center' });
+  }
+
+  doc.save(`Liquidacion_${entidad}_SC_Estevez_${mes}.pdf`);
+}
