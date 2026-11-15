@@ -6,6 +6,7 @@ let cierresUltimos7Dias = [];
 let diaActivoTab = null;
 let contadorFilasVenta = 0;
 let guardandoCierre = false;
+let ultimoInformeMensualCargado = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
   const hoy = new Date();
@@ -217,6 +218,7 @@ function agregarFilaVenta(tipoPorDefecto = 'Efectivo') {
         <option value="Policía" ${tipoPorDefecto === 'Policía' ? 'selected' : ''}>Policía</option>
         <option value="Comuna" ${tipoPorDefecto === 'Comuna' ? 'selected' : ''}>Comuna</option>
         <option value="Bomberos" ${tipoPorDefecto === 'Bomberos' ? 'selected' : ''}>Bomberos</option>
+        <option value="Cooperativa" ${tipoPorDefecto === 'Cooperativa' ? 'selected' : ''}>Cooperativa</option>
         <option value="Transferencia" ${tipoPorDefecto === 'Transferencia' ? 'selected' : ''}>Transferencia</option>
         <option value="Otro" ${tipoPorDefecto === 'Otro' ? 'selected' : ''}>Otro</option>
       </select>
@@ -273,6 +275,7 @@ function obtenerDetalleRendicion() {
   let policia = 0;
   let comuna = 0;
   let bomberos = 0;
+  let cooperativa = 0;
   let transferencia = 0;
   let otro = 0;
   const itemsDetallados = [];
@@ -295,6 +298,7 @@ function obtenerDetalleRendicion() {
       else if (categoria === 'Policía') policia += monto;
       else if (categoria === 'Comuna') comuna += monto;
       else if (categoria === 'Bomberos') bomberos += monto;
+      else if (categoria === 'Cooperativa') cooperativa += monto;
       else if (categoria === 'Transferencia') transferencia += monto;
       else otro += monto;
 
@@ -312,6 +316,7 @@ function obtenerDetalleRendicion() {
     policia: Number(policia.toFixed(2)),
     comuna: Number(comuna.toFixed(2)),
     bomberos: Number(bomberos.toFixed(2)),
+    cooperativa: Number(cooperativa.toFixed(2)),
     transferencia: Number(transferencia.toFixed(2)),
     otro: Number(otro.toFixed(2)),
     itemsDetallados
@@ -342,7 +347,9 @@ function recalcular() {
 
   const totalVenta = Number((vSuper + vEuro + vGasoil).toFixed(2));
   const r = obtenerDetalleRendicion();
-  const totalNormalizado = Number((r.efectivo + r.policia + r.comuna + r.bomberos + r.transferencia + r.otro).toFixed(2));
+  const totalNormalizado = Number((
+    r.efectivo + r.policia + r.comuna + r.bomberos + r.cooperativa + r.transferencia + r.otro
+  ).toFixed(2));
 
   document.getElementById('display_total_venta').textContent = formatoMoneda(totalVenta);
   document.getElementById('display_total_normalizado').textContent = formatoMoneda(totalNormalizado);
@@ -370,7 +377,9 @@ async function guardarCierre() {
   const { lSuper, vSuper, lEuro, vEuro, lGasoil, vGasoil } = calcularValoresVenta();
   const totalVenta = Number((vSuper + vEuro + vGasoil).toFixed(2));
   const r = obtenerDetalleRendicion();
-  const totalNormalizado = Number((r.efectivo + r.policia + r.comuna + r.bomberos + r.transferencia + r.otro).toFixed(2));
+  const totalNormalizado = Number((
+    r.efectivo + r.policia + r.comuna + r.bomberos + r.cooperativa + r.transferencia + r.otro
+  ).toFixed(2));
 
   const datos = {
     fecha: document.getElementById('fecha').value,
@@ -385,6 +394,7 @@ async function guardarCierre() {
     policia: r.policia,
     comuna: r.comuna,
     bomberos: r.bomberos,
+    cooperativa: r.cooperativa,
     transferencia: r.transferencia,
     otro: r.otro,
     medios_extra: r.itemsDetallados,
@@ -522,6 +532,7 @@ function renderizarDetalleDia(fecha) {
           <div class="flex justify-between border-b border-slate-300 pb-1"><span>Policía:</span><span>${formatoMoneda(c.policia)}</span></div>
           <div class="flex justify-between border-b border-slate-300 pb-1"><span>Comuna:</span><span>${formatoMoneda(c.comuna)}</span></div>
           <div class="flex justify-between border-b border-slate-300 pb-1"><span>Bomberos:</span><span>${formatoMoneda(c.bomberos)}</span></div>
+          <div class="flex justify-between border-b border-slate-300 pb-1"><span>Cooperativa:</span><span>${formatoMoneda(c.cooperativa)}</span></div>
           <div class="flex justify-between border-b border-slate-300 pb-1"><span>Transferencia:</span><span>${formatoMoneda(c.transferencia)}</span></div>
           <div class="flex justify-between"><span>Otro:</span><span>${formatoMoneda(c.otro)}</span></div>
         `;
@@ -585,8 +596,6 @@ function renderizarDetalleDia(fecha) {
 // ==========================================
 // INFORMES MENSUALES (VISTA PREVIA + PDF GENERAL Y POR ENTIDAD)
 // ==========================================
-let ultimoInformeMensualCargado = null;
-
 async function cargarVistaPreviaMensual() {
   const mes = document.getElementById('mes_informe').value;
   const cont = document.getElementById('preview-mensual');
@@ -634,9 +643,9 @@ async function cargarVistaPreviaMensual() {
       <!-- Totales Mensuales por Medio / Entidad con descarga individual -->
       <div>
         <h3 class="text-sm font-extrabold text-slate-600 uppercase tracking-wider mb-3">Resumen Mensual por Medio de Pago y Liquidación por Entidad</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           
-          <!-- POLICÍA (Con botón PDF individual) -->
+          <!-- POLICÍA -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Policía</span>
@@ -648,7 +657,7 @@ async function cargarVistaPreviaMensual() {
             </button>
           </div>
 
-          <!-- COMUNA (Con botón PDF individual) -->
+          <!-- COMUNA -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Comuna</span>
@@ -660,7 +669,7 @@ async function cargarVistaPreviaMensual() {
             </button>
           </div>
 
-          <!-- BOMBEROS (Con botón PDF individual) -->
+          <!-- BOMBEROS -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Bomberos</span>
@@ -669,6 +678,18 @@ async function cargarVistaPreviaMensual() {
             <button onclick="generarPDFEntidadMensual('Bomberos')"
               class="w-full bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black py-2.5 px-4 rounded-xl text-sm transition">
               DESCARGAR PDF BOMBEROS
+            </button>
+          </div>
+
+          <!-- COOPERATIVA -->
+          <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div>
+              <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Cooperativa</span>
+              <p class="text-2xl font-black text-emerald-950 mt-1">${formatoMoneda(r.cooperativa)}</p>
+            </div>
+            <button onclick="generarPDFEntidadMensual('Cooperativa')"
+              class="w-full bg-emerald-700 hover:bg-emerald-800 text-[#f2f6f4] font-black py-2.5 px-4 rounded-xl text-sm transition">
+              DESCARGAR PDF COOPERATIVA
             </button>
           </div>
 
@@ -683,13 +704,13 @@ async function cargarVistaPreviaMensual() {
             <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(r.transferencia)}</p>
           </div>
 
-          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-2xl p-4 flex flex-col justify-between gap-3">
+          <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-2xl p-4 sm:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-slate-600 uppercase">Otros Conceptos Mensual</span>
               <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(r.otro)}</p>
             </div>
             <button onclick="generarPDFEntidadMensual('Otro')"
-              class="w-full bg-slate-700 hover:bg-slate-800 text-[#f2f6f4] font-black py-2 px-4 rounded-xl text-xs transition">
+              class="bg-slate-700 hover:bg-slate-800 text-[#f2f6f4] font-black py-2.5 px-5 rounded-xl text-xs transition">
               DESCARGAR DETALLE OTROS
             </button>
           </div>
@@ -701,7 +722,7 @@ async function cargarVistaPreviaMensual() {
 }
 
 // ==========================================
-// PDF INDIVIDUAL DE LIQUIDACIÓN POR ENTIDAD (POLICÍA / COMUNA / BOMBEROS)
+// PDF INDIVIDUAL DE LIQUIDACIÓN POR ENTIDAD
 // ==========================================
 async function generarPDFEntidadMensual(entidad) {
   const mes = document.getElementById('mes_informe').value;
@@ -728,8 +749,13 @@ async function generarPDFEntidadMensual(entidad) {
         ]);
       });
     } else {
-      // Compatibilidad con cierres viejos que no tenían array medios_extra
-      const campoMapa = { 'Policía': c.policia, 'Comuna': c.comuna, 'Bomberos': c.bomberos, 'Otro': c.otro };
+      const campoMapa = {
+        'Policía': c.policia,
+        'Comuna': c.comuna,
+        'Bomberos': c.bomberos,
+        'Cooperativa': c.cooperativa,
+        'Otro': c.otro
+      };
       const montoDirecto = Number(campoMapa[entidad] || 0);
       if (montoDirecto > 0) {
         totalEntidad += montoDirecto;
@@ -750,7 +776,6 @@ async function generarPDFEntidadMensual(entidad) {
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  // Encabezado SC Estevez
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(22);
   doc.setTextColor(21, 128, 61);
@@ -765,7 +790,6 @@ async function generarPDFEntidadMensual(entidad) {
   doc.setTextColor(71, 85, 105);
   doc.text(`Período liquidado: ${mes}   |   Cantidad de registros: ${filasEntidad.length}`, 14, 34);
 
-  // Tabla detallada de vales / cargas de esa entidad
   doc.autoTable({
     startY: 40,
     head: [['Fecha', 'N° Cierre', 'Concepto', 'Detalle / Móvil / Patente', 'Importe ($)']],
@@ -797,4 +821,226 @@ async function generarPDFEntidadMensual(entidad) {
   }
 
   doc.save(`Liquidacion_${entidad}_SC_Estevez_${mes}.pdf`);
+}
+
+// ==========================================
+// GENERADORES DE PDF GENERALES
+// ==========================================
+function generarComprobantePDF(d, idCierre) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const items = d.medios_extra || [];
+
+  const dibujarMarcoPagina = () => {
+    doc.setDrawColor(21, 128, 61);
+    doc.setLineWidth(0.8);
+    doc.rect(15, 15, 180, 267);
+  };
+
+  dibujarMarcoPagina();
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(21, 128, 61);
+  doc.text('SC Estevez', 105, 27, { align: 'center' });
+
+  doc.setFontSize(14);
+  doc.setTextColor(21, 128, 61);
+  doc.text(`COMPROBANTE DE CIERRE #${idCierre}`, 105, 35, { align: 'center' });
+
+  doc.setFontSize(12);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`Fecha: ${d.fecha}`, 105, 42, { align: 'center' });
+
+  doc.setDrawColor(100, 116, 139);
+  doc.setLineWidth(0.4);
+  doc.line(75, 48, 75, 106);
+  doc.line(135, 48, 135, 106);
+
+  doc.setFontSize(14);
+  doc.text('Super', 45, 56, { align: 'center' });
+  doc.text('Euro', 105, 56, { align: 'center' });
+  doc.text('Gasoil', 165, 56, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text(`L. venta: ${Number(d.litros_super).toFixed(2)} L`, 45, 72, { align: 'center' });
+  doc.text(`L. venta: ${Number(d.litros_euro).toFixed(2)} L`, 105, 72, { align: 'center' });
+  doc.text(`L. venta: ${Number(d.litros_gasoil).toFixed(2)} L`, 165, 72, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Valor: ${formatoMoneda(Number(d.valor_super))}`, 45, 89, { align: 'center' });
+  doc.text(`Valor: ${formatoMoneda(Number(d.valor_euro))}`, 105, 89, { align: 'center' });
+  doc.text(`Valor: ${formatoMoneda(Number(d.valor_gasoil))}`, 165, 89, { align: 'center' });
+
+  doc.setLineWidth(0.6);
+  doc.line(25, 112, 185, 112);
+
+  doc.setFontSize(15);
+  doc.text(`Total venta: ${formatoMoneda(Number(d.total_venta))}`, 105, 123, { align: 'center' });
+
+  doc.line(25, 130, 185, 130);
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  let y = 144;
+
+  if (items.length > 0) {
+    items.forEach(item => {
+      if (y > 250) {
+        doc.addPage();
+        dibujarMarcoPagina();
+        y = 30;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 41, 59);
+      doc.text(`${item.tipo} : ${formatoMoneda(Number(item.monto))}`, 30, y);
+      if (item.descripcion) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(10);
+        const lineasDesc = doc.splitTextToSize(`(${item.descripcion})`, 145);
+        doc.text(lineasDesc, 33, y + 5);
+        doc.setFontSize(12);
+        y += 8 + (lineasDesc.length * 4.5);
+      } else {
+        y += 9;
+      }
+      doc.setFont('helvetica', 'normal');
+    });
+  } else {
+    doc.text(`Efectivo : ${formatoMoneda(Number(d.efectivo))}`, 30, y); y += 8;
+    doc.text(`Policía : ${formatoMoneda(Number(d.policia))}`, 30, y); y += 8;
+    doc.text(`Comuna : ${formatoMoneda(Number(d.comuna || 0))}`, 30, y); y += 8;
+    doc.text(`Bomberos : ${formatoMoneda(Number(d.bomberos || 0))}`, 30, y); y += 8;
+    doc.text(`Cooperativa : ${formatoMoneda(Number(d.cooperativa || 0))}`, 30, y); y += 8;
+    doc.text(`Transferencia : ${formatoMoneda(Number(d.transferencia))}`, 30, y); y += 8;
+    doc.text(`Otro : ${formatoMoneda(Number(d.otro))}`, 30, y); y += 8;
+  }
+
+  if (y > 255) {
+    doc.addPage();
+    dibujarMarcoPagina();
+    y = 30;
+  }
+
+  const yTotalNorm = Math.max(195, y + 8);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(21, 128, 61);
+  doc.text('Total normalizado:', 150, yTotalNorm, { align: 'center' });
+  doc.setFontSize(15);
+  doc.text(formatoMoneda(Number(d.total_normalizado)), 150, yTotalNorm + 8, { align: 'center' });
+
+  doc.save(`Cierre_Caja_${d.fecha}_N${idCierre}.pdf`);
+}
+
+async function generarInformeMensualPDF() {
+  const mes = document.getElementById('mes_informe').value;
+  if (!mes) return alert('Seleccione un mes.');
+
+  const res = await fetch(`/api/informes/${mes}?t=${Date.now()}`, { cache: 'no-store' });
+  const data = await res.json();
+
+  if (data.cierres.length === 0) {
+    return alert(`No hay cierres registrados para el período ${mes}.`);
+  }
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const r = data.resumen;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(21, 128, 61);
+  doc.text('SC Estevez', 14, 16);
+
+  doc.setFontSize(15);
+  doc.setTextColor(21, 128, 61);
+  doc.text(`INFORME MENSUAL DE VENTAS Y LITROS - PERÍODO ${mes}`, 14, 24);
+
+  doc.setFontSize(11);
+  doc.setTextColor(51, 65, 85);
+  doc.text(`Total de cierres registrados: ${r.cantidad_cierres}`, 14, 31);
+
+  // 1. Tabla resumen por combustible
+  doc.autoTable({
+    startY: 35,
+    head: [['Combustible', 'Total Litros Vendidos', 'Recaudación Total ($)']],
+    body: [
+      ['Super', `${r.litros_super.toFixed(2)} L`, formatoMoneda(r.valor_super)],
+      ['Euro', `${r.litros_euro.toFixed(2)} L`, formatoMoneda(r.valor_euro)],
+      ['Gasoil', `${r.litros_gasoil.toFixed(2)} L`, formatoMoneda(r.valor_gasoil)],
+      ['TOTAL GENERAL', `${(r.litros_super + r.litros_euro + r.litros_gasoil).toFixed(2)} L`, formatoMoneda(r.total_venta)]
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [21, 128, 61] }
+  });
+
+  // 2. Tabla consolidado mensual por Medio de Pago / Entidad Oficial
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 7,
+    head: [['Efectivo', 'Policía', 'Comuna', 'Bomberos', 'Cooperativa', 'Transferencia', 'Otro', 'Total Normalizado Mes']],
+    body: [[
+      formatoMoneda(r.efectivo),
+      formatoMoneda(r.policia),
+      formatoMoneda(r.comuna),
+      formatoMoneda(r.bomberos),
+      formatoMoneda(r.cooperativa),
+      formatoMoneda(r.transferencia),
+      formatoMoneda(r.otro),
+      formatoMoneda(r.total_normalizado)
+    ]],
+    theme: 'grid',
+    styles: { fontStyle: 'bold', fontSize: 9 },
+    headStyles: { fillColor: [15, 118, 110] }
+  });
+
+  // 3. Tabla detalle diario de cierres
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 7,
+    head: [['Fecha', 'Super (L)', 'Euro (L)', 'Gasoil (L)', 'Total Venta', 'Efectivo', 'Policía', 'Comuna', 'Bomberos', 'Coop.', 'Transf.', 'Otro', 'Normalizado']],
+    body: data.cierres.map(c => [
+      c.fecha,
+      c.litros_super.toFixed(1),
+      c.litros_euro.toFixed(1),
+      c.litros_gasoil.toFixed(1),
+      formatoMoneda(c.total_venta),
+      formatoMoneda(c.efectivo),
+      formatoMoneda(c.policia),
+      formatoMoneda(c.comuna || 0),
+      formatoMoneda(c.bomberos || 0),
+      formatoMoneda(c.cooperativa || 0),
+      formatoMoneda(c.transferencia),
+      formatoMoneda(c.otro),
+      formatoMoneda(c.total_normalizado)
+    ]),
+    styles: { fontSize: 7.5 },
+    headStyles: { fillColor: [21, 128, 61] }
+  });
+
+  // 4. Desglose detallado de vales/cargas de Policía, Comuna, Bomberos, Cooperativa y Otros
+  const movimientosEspeciales = [];
+  data.cierres.forEach(c => {
+    (c.medios_extra || []).forEach(item => {
+      if (['Policía', 'Comuna', 'Bomberos', 'Cooperativa', 'Otro'].includes(item.categoria) || item.descripcion) {
+        movimientosEspeciales.push([
+          c.fecha,
+          `#${c.id}`,
+          item.tipo,
+          item.descripcion || '-',
+          formatoMoneda(item.monto)
+        ]);
+      }
+    });
+  });
+
+  if (movimientosEspeciales.length > 0) {
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 8,
+      head: [['Fecha', 'Cierre', 'Entidad / Concepto', 'Descripción (Móvil / Patente / Detalle)', 'Monto ($)']],
+      body: movimientosEspeciales,
+      styles: { fontSize: 8.5 },
+      headStyles: { fillColor: [51, 65, 85] }
+    });
+  }
+
+  doc.save(`Informe_Mensual_SC_Estevez_${mes}.pdf`);
 }

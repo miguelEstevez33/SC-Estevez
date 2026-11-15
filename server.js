@@ -44,6 +44,7 @@ db.exec(`
     policia REAL NOT NULL DEFAULT 0,
     comuna REAL NOT NULL DEFAULT 0,
     bomberos REAL NOT NULL DEFAULT 0,
+    cooperativa REAL NOT NULL DEFAULT 0,
     transferencia REAL NOT NULL DEFAULT 0,
     otro REAL NOT NULL DEFAULT 0,
     medios_extra TEXT NOT NULL DEFAULT '[]',
@@ -61,6 +62,9 @@ if (!columnasCierres.includes('comuna')) {
 }
 if (!columnasCierres.includes('bomberos')) {
   db.exec("ALTER TABLE cierres_caja ADD COLUMN bomberos REAL NOT NULL DEFAULT 0");
+}
+if (!columnasCierres.includes('cooperativa')) {
+  db.exec("ALTER TABLE cierres_caja ADD COLUMN cooperativa REAL NOT NULL DEFAULT 0");
 }
 
 const insertTanque = db.prepare('INSERT OR IGNORE INTO tanques (id, combustible, litros_disponibles, precio_litro) VALUES (?, ?, ?, ?)');
@@ -112,11 +116,12 @@ app.post('/api/cierres', (req, res) => {
   const d = req.body;
   const comuna = Number(d.comuna || 0);
   const bomberos = Number(d.bomberos || 0);
+  const cooperativa = Number(d.cooperativa || 0);
 
   const camposNumericos = [
     d.litros_super, d.valor_super, d.litros_euro, d.valor_euro,
     d.litros_gasoil, d.valor_gasoil, d.total_venta,
-    d.efectivo, d.policia, comuna, bomberos, d.transferencia, d.otro, d.total_normalizado
+    d.efectivo, d.policia, comuna, bomberos, cooperativa, d.transferencia, d.otro, d.total_normalizado
   ];
   if (camposNumericos.some(n => typeof n !== 'number' || isNaN(n) || n < 0)) {
     return res.status(400).json({ error: 'No se permiten valores negativos ni inválidos.' });
@@ -136,8 +141,8 @@ app.post('/api/cierres', (req, res) => {
       INSERT INTO cierres_caja (
         fecha, litros_super, valor_super, litros_euro, valor_euro,
         litros_gasoil, valor_gasoil, total_venta, efectivo, policia,
-        comuna, bomberos, transferencia, otro, medios_extra, total_normalizado
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        comuna, bomberos, cooperativa, transferencia, otro, medios_extra, total_normalizado
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const info = insert.run(
@@ -146,7 +151,7 @@ app.post('/api/cierres', (req, res) => {
       datos.litros_euro, datos.valor_euro,
       datos.litros_gasoil, datos.valor_gasoil,
       datos.total_venta,
-      datos.efectivo, datos.policia, comuna, bomberos, datos.transferencia, datos.otro,
+      datos.efectivo, datos.policia, comuna, bomberos, cooperativa, datos.transferencia, datos.otro,
       JSON.stringify(datos.medios_extra || []),
       datos.total_normalizado
     );
@@ -215,6 +220,7 @@ app.get('/api/cierres/ultimos-7-dias', (req, res) => {
     ...c,
     comuna: c.comuna || 0,
     bomberos: c.bomberos || 0,
+    cooperativa: c.cooperativa || 0,
     medios_extra: JSON.parse(c.medios_extra || '[]')
   })));
 });
@@ -231,6 +237,7 @@ app.get('/api/informes/:mes', (req, res) => {
     ...c,
     comuna: c.comuna || 0,
     bomberos: c.bomberos || 0,
+    cooperativa: c.cooperativa || 0,
     medios_extra: JSON.parse(c.medios_extra || '[]')
   }));
 
@@ -246,6 +253,7 @@ app.get('/api/informes/:mes', (req, res) => {
     acc.policia += c.policia;
     acc.comuna += c.comuna;
     acc.bomberos += c.bomberos;
+    acc.cooperativa += c.cooperativa;
     acc.transferencia += c.transferencia;
     acc.otro += c.otro;
     acc.total_normalizado += c.total_normalizado;
@@ -256,7 +264,7 @@ app.get('/api/informes/:mes', (req, res) => {
     litros_euro: 0, valor_euro: 0,
     litros_gasoil: 0, valor_gasoil: 0,
     total_venta: 0,
-    efectivo: 0, policia: 0, comuna: 0, bomberos: 0,
+    efectivo: 0, policia: 0, comuna: 0, bomberos: 0, cooperativa: 0,
     transferencia: 0, otro: 0, total_normalizado: 0
   });
 
