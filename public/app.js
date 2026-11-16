@@ -149,7 +149,11 @@ async function cargarTanques() {
   document.getElementById('input_precio_euro').value = precios.Euro;
   document.getElementById('input_precio_gasoil').value = precios.Gasoil;
 
-  recalcular();
+  // Recalcular montos de filas si hay litros cargados
+  document.querySelectorAll('#lista-ventas-rendicion > div').forEach(fila => {
+    const idFila = fila.id;
+    if (idFila) calcularMontoFila(idFila);
+  });
 }
 
 async function ajustarTanque(combustible, operacion) {
@@ -206,6 +210,9 @@ function agregarFilaVenta(tipoPorDefecto = 'Efectivo') {
   const idFila = `fila-venta-${contadorFilasVenta}`;
   const contenedor = document.getElementById('lista-ventas-rendicion');
 
+  const usaLitrosInicial = !['Efectivo', 'Transferencia'].includes(tipoPorDefecto);
+  const esOtroInicial = tipoPorDefecto === 'Otro';
+
   const fila = document.createElement('div');
   fila.id = idFila;
   fila.className = 'bg-[#f2f6f4] border-2 border-emerald-700/40 rounded-xl p-4 space-y-3 shadow-sm overflow-hidden';
@@ -235,7 +242,24 @@ function agregarFilaVenta(tipoPorDefecto = 'Efectivo') {
     </div>
 
     <input type="text" placeholder="Nombre del concepto (ej: Cuenta Corriente, Mercado Pago, Vale...)"
-      class="venta-otro-nombre ${tipoPorDefecto === 'Otro' ? '' : 'hidden'} w-full bg-[#f7faf8] border-2 border-emerald-700/60 focus:border-emerald-700 focus:outline-none rounded-xl px-4 py-2.5 text-base font-bold text-slate-900">
+      class="venta-otro-nombre ${esOtroInicial ? '' : 'hidden'} w-full bg-[#f7faf8] border-2 border-emerald-700/60 focus:border-emerald-700 focus:outline-none rounded-xl px-4 py-2.5 text-base font-bold text-slate-900">
+
+    <!-- SECCIÓN DE LITROS Y COMBUSTIBLE (Visible en Policía, Comuna, Bomberos, Cooperativa, Otro) -->
+    <div class="venta-seccion-litros ${usaLitrosInicial ? '' : 'hidden'} grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#e6eeea] p-3 rounded-xl border border-emerald-700/30">
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">Combustible del Vale:</label>
+        <select onchange="calcularMontoFila('${idFila}')" class="venta-combustible w-full bg-white border border-slate-400 rounded-lg p-2 font-bold text-sm text-slate-800 focus:outline-none focus:border-emerald-700">
+          <option value="Super">Super</option>
+          <option value="Euro">Euro</option>
+          <option value="Gasoil">Gasoil</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">Litros Cargados:</label>
+        <input type="number" step="0.01" min="0" placeholder="0.00 L" oninput="calcularMontoFila('${idFila}')"
+          class="venta-litros w-full bg-white border border-slate-400 rounded-lg p-2 font-black text-right text-sm text-slate-900 focus:outline-none focus:border-emerald-700">
+      </div>
+    </div>
 
     <input type="text" placeholder="Pequeña descripción (opcional: móvil, patente, chofer, N° vale...)"
       class="venta-desc w-full bg-[#f7faf8] border border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl px-4 py-2 text-base font-medium text-slate-700">
@@ -249,14 +273,45 @@ function onCambiarTipoVenta(idFila) {
   if (!fila) return;
   const select = fila.querySelector('.venta-select');
   const inputOtroNombre = fila.querySelector('.venta-otro-nombre');
+  const seccionLitros = fila.querySelector('.venta-seccion-litros');
 
-  if (select.value === 'Otro') {
+  const tipo = select.value;
+  const esOtro = tipo === 'Otro';
+  const usaLitros = !['Efectivo', 'Transferencia'].includes(tipo);
+
+  if (esOtro) {
     inputOtroNombre.classList.remove('hidden');
     inputOtroNombre.focus();
   } else {
     inputOtroNombre.classList.add('hidden');
     inputOtroNombre.value = '';
   }
+
+  if (usaLitros) {
+    seccionLitros.classList.remove('hidden');
+    calcularMontoFila(idFila);
+  } else {
+    seccionLitros.classList.add('hidden');
+    fila.querySelector('.venta-litros').value = '';
+    recalcular();
+  }
+}
+
+function calcularMontoFila(idFila) {
+  const fila = document.getElementById(idFila);
+  if (!fila) return;
+  const select = fila.querySelector('.venta-select');
+  const tipo = select.value;
+
+  if (['Efectivo', 'Transferencia'].includes(tipo)) return;
+
+  const combustible = fila.querySelector('.venta-combustible').value;
+  const litros = parseFloat(fila.querySelector('.venta-litros').value) || 0;
+  const precioUnitario = precios[combustible] || 0;
+
+  const montoTotal = Number((litros * precioUnitario).toFixed(2));
+  fila.querySelector('.venta-monto').value = montoTotal;
+  recalcular();
 }
 
 function eliminarFilaVenta(idFila) {
@@ -291,7 +346,16 @@ function obtenerDetalleRendicion() {
     }
     const descripcion = f.querySelector('.venta-desc').value.trim();
 
-    if (monto > 0 || descripcion !== '' || nombrePersonalizado !== '') {
+    const usaLitros = !['Efectivo', 'Transferencia'].includes(categoria);
+    let combustible = null;
+    let litros = 0;
+
+    if (usaLitros) {
+      combustible = f.querySelector('.venta-combustible').value;
+      litros = parseFloat(f.querySelector('.venta-litros').value) || 0;
+    }
+
+    if (monto > 0 || litros > 0 || descripcion !== '' || nombrePersonalizado !== '') {
       const etiqueta = (categoria === 'Otro' && nombrePersonalizado) ? nombrePersonalizado : categoria;
 
       if (categoria === 'Efectivo') efectivo += monto;
@@ -306,6 +370,8 @@ function obtenerDetalleRendicion() {
         categoria,
         tipo: etiqueta,
         monto: Number(monto.toFixed(2)),
+        combustible,
+        litros: Number(litros.toFixed(2)),
         descripcion
       });
     }
@@ -522,6 +588,7 @@ function renderizarDetalleDia(fecha) {
           <div class="flex justify-between items-start border-b border-slate-300 pb-1">
             <div>
               <span>${escaparHTML(item.tipo)}:</span>
+              ${item.combustible && item.litros ? `<span class="block text-xs font-bold text-emerald-800">${item.litros} L de ${item.combustible}</span>` : ''}
               ${item.descripcion ? `<span class="block text-xs font-normal text-slate-600">${escaparHTML(item.descripcion)}</span>` : ''}
             </div>
             <span>${formatoMoneda(item.monto)}</span>
@@ -594,7 +661,7 @@ function renderizarDetalleDia(fecha) {
 }
 
 // ==========================================
-// INFORMES MENSUALES (VISTA PREVIA + PDF GENERAL Y POR ENTIDAD)
+// INFORMES MENSUALES
 // ==========================================
 async function cargarVistaPreviaMensual() {
   const mes = document.getElementById('mes_informe').value;
@@ -613,7 +680,6 @@ async function cargarVistaPreviaMensual() {
   const r = data.resumen;
   cont.innerHTML = `
     <div class="space-y-6">
-      <!-- Totales por Combustible -->
       <div>
         <h3 class="text-sm font-extrabold text-slate-600 uppercase tracking-wider mb-3">Ventas por Combustible (${r.cantidad_cierres} cierres)</h3>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -640,12 +706,10 @@ async function cargarVistaPreviaMensual() {
         </div>
       </div>
 
-      <!-- Totales Mensuales por Medio / Entidad con descarga individual -->
       <div>
         <h3 class="text-sm font-extrabold text-slate-600 uppercase tracking-wider mb-3">Resumen Mensual por Medio de Pago y Liquidación por Entidad</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           
-          <!-- POLICÍA -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Policía</span>
@@ -657,7 +721,6 @@ async function cargarVistaPreviaMensual() {
             </button>
           </div>
 
-          <!-- COMUNA -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Comuna</span>
@@ -669,7 +732,6 @@ async function cargarVistaPreviaMensual() {
             </button>
           </div>
 
-          <!-- BOMBEROS -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Bomberos</span>
@@ -681,7 +743,6 @@ async function cargarVistaPreviaMensual() {
             </button>
           </div>
 
-          <!-- COOPERATIVA -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700 rounded-2xl p-4 flex flex-col justify-between gap-3">
             <div>
               <span class="text-xs font-extrabold text-emerald-900 uppercase">Cuenta Mensual Cooperativa</span>
@@ -693,7 +754,6 @@ async function cargarVistaPreviaMensual() {
             </button>
           </div>
 
-          <!-- Otros medios generales -->
           <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-2xl p-4">
             <span class="text-xs font-extrabold text-slate-600 uppercase">Efectivo Mensual</span>
             <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(r.efectivo)}</p>
@@ -740,11 +800,15 @@ async function generarPDFEntidadMensual(entidad) {
     if (items.length > 0) {
       items.forEach(item => {
         totalEntidad += Number(item.monto || 0);
+        let detalleStr = item.descripcion || '-';
+        if (item.combustible && item.litros) {
+          detalleStr = `${item.litros} L de ${item.combustible}` + (item.descripcion ? ` (${item.descripcion})` : '');
+        }
         filasEntidad.push([
           c.fecha,
           `Comprobante #${c.id}`,
           item.tipo,
-          item.descripcion || 'Sin detalle especificado',
+          detalleStr,
           formatoMoneda(item.monto)
         ]);
       });
@@ -792,7 +856,7 @@ async function generarPDFEntidadMensual(entidad) {
 
   doc.autoTable({
     startY: 40,
-    head: [['Fecha', 'N° Cierre', 'Concepto', 'Detalle / Móvil / Patente', 'Importe ($)']],
+    head: [['Fecha', 'N° Cierre', 'Concepto', 'Detalle (Litros / Móvil / Patente)', 'Importe ($)']],
     body: [
       ...filasEntidad,
       ['', '', '', 'TOTAL A ABONAR', formatoMoneda(totalEntidad)]
@@ -894,10 +958,19 @@ function generarComprobantePDF(d, idCierre) {
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(30, 41, 59);
       doc.text(`${item.tipo} : ${formatoMoneda(Number(item.monto))}`, 30, y);
+      
+      let textoExtra = '';
+      if (item.combustible && item.litros) {
+        textoExtra += `${item.litros} L de ${item.combustible}`;
+      }
       if (item.descripcion) {
+        textoExtra += textoExtra ? ` - ${item.descripcion}` : item.descripcion;
+      }
+
+      if (textoExtra) {
         doc.setFont('helvetica', 'italic');
         doc.setFontSize(10);
-        const lineasDesc = doc.splitTextToSize(`(${item.descripcion})`, 145);
+        const lineasDesc = doc.splitTextToSize(`(${textoExtra})`, 145);
         doc.text(lineasDesc, 33, y + 5);
         doc.setFontSize(12);
         y += 8 + (lineasDesc.length * 4.5);
@@ -974,7 +1047,7 @@ async function generarInformeMensualPDF() {
     headStyles: { fillColor: [21, 128, 61] }
   });
 
-  // 2. Tabla consolidado mensual por Medio de Pago / Entidad Oficial
+  // 2. Tabla consolidado mensual por Medio de Pago / Entidad
   doc.autoTable({
     startY: doc.lastAutoTable.finalY + 7,
     head: [['Efectivo', 'Policía', 'Comuna', 'Bomberos', 'Cooperativa', 'Transferencia', 'Otro', 'Total Normalizado Mes']],
@@ -1016,16 +1089,20 @@ async function generarInformeMensualPDF() {
     headStyles: { fillColor: [21, 128, 61] }
   });
 
-  // 4. Desglose detallado de vales/cargas de Policía, Comuna, Bomberos, Cooperativa y Otros
+  // 4. Desglose detallado de vales con litros y descripciones
   const movimientosEspeciales = [];
   data.cierres.forEach(c => {
     (c.medios_extra || []).forEach(item => {
       if (['Policía', 'Comuna', 'Bomberos', 'Cooperativa', 'Otro'].includes(item.categoria) || item.descripcion) {
+        let det = item.descripcion || '-';
+        if (item.combustible && item.litros) {
+          det = `${item.litros} L de ${item.combustible}` + (item.descripcion ? ` (${item.descripcion})` : '');
+        }
         movimientosEspeciales.push([
           c.fecha,
           `#${c.id}`,
           item.tipo,
-          item.descripcion || '-',
+          det,
           formatoMoneda(item.monto)
         ]);
       }
@@ -1035,7 +1112,7 @@ async function generarInformeMensualPDF() {
   if (movimientosEspeciales.length > 0) {
     doc.autoTable({
       startY: doc.lastAutoTable.finalY + 8,
-      head: [['Fecha', 'Cierre', 'Entidad / Concepto', 'Descripción (Móvil / Patente / Detalle)', 'Monto ($)']],
+      head: [['Fecha', 'Cierre', 'Entidad / Concepto', 'Detalle (Litros / Móvil / Patente)', 'Monto ($)']],
       body: movimientosEspeciales,
       styles: { fontSize: 8.5 },
       headStyles: { fillColor: [51, 65, 85] }
