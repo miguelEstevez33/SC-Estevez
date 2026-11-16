@@ -4,13 +4,103 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión de Estación - Control de Caja y Tanques</title>
+  <script>
+    if (localStorage.getItem('tema_oscuro') === '1') {
+      document.documentElement.classList.add('dark');
+    }
+  </script>
   <script src="libs/tailwind.js"></script>
   <script src="libs/jspdf.umd.min.js"></script>
   <script src="libs/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    html.dark {
+      color-scheme: dark;
+    }
+    html.dark body.bg-\[\#dfe7e3\] {
+      background-color: #0b1120;
+      color: #e2e8f0;
+    }
+    html.dark .bg-\[\#f2f6f4\] {
+      background-color: #1e293b;
+    }
+    html.dark .hover\:bg-\[\#e7efeb\]:hover,
+    html.dark .hover\:bg-\[\#e6eeea\]:hover {
+      background-color: #263449;
+    }
+    html.dark .bg-\[\#e6eeea\] {
+      background-color: #151f30;
+    }
+    html.dark .bg-\[\#dce6e1\],
+    html.dark .bg-\[\#d4dfd9\] {
+      background-color: #0f172a;
+    }
+    html.dark .bg-\[\#dce5e0\] {
+      background-color: #334155;
+    }
+    html.dark .hover\:bg-\[\#cfd9d4\]:hover {
+      background-color: #475569;
+    }
+    html.dark .bg-\[\#f7faf8\],
+    html.dark .bg-\[\#eef3f0\],
+    html.dark .bg-\[\#e8efec\],
+    html.dark .bg-white {
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+    html.dark .text-emerald-950,
+    html.dark .text-emerald-900,
+    html.dark .text-emerald-800 {
+      color: #34d399;
+    }
+    html.dark .text-slate-900,
+    html.dark .text-slate-800 {
+      color: #f1f5f9;
+    }
+    html.dark .text-slate-700,
+    html.dark .text-slate-600 {
+      color: #94a3b8;
+    }
+    html.dark .text-red-700 {
+      color: #f87171;
+    }
+    html.dark .border-slate-400,
+    html.dark .border-slate-300,
+    html.dark .border-slate-300\/60 {
+      border-color: #334155;
+    }
+    html.dark .bg-emerald-700\/15 {
+      background-color: rgba(16, 185, 129, 0.2);
+    }
+    html.dark .bg-amber-100\/80 {
+      background-color: rgba(120, 53, 15, 0.35);
+    }
+    html.dark .text-amber-800,
+    html.dark .text-amber-950 {
+      color: #fcd34d;
+    }
+    html.dark .bg-amber-200\/80 {
+      background-color: rgba(120, 53, 15, 0.5);
+    }
+    html.dark .bg-emerald-200\/80 {
+      background-color: rgba(6, 78, 59, 0.6);
+    }
+  </style>
 </head>
-<body class="bg-[#dfe7e3] text-slate-800 font-sans select-none min-h-screen">
+<body class="bg-[#dfe7e3] text-slate-800 font-sans select-none min-h-screen transition-colors duration-200">
 
   <div class="max-w-6xl mx-auto p-4 md:p-6">
+
+    <!-- BARRA SUPERIOR: SWITCH MODO DÍA / MODO NOCTURNO -->
+    <div class="flex justify-end mb-3">
+      <button id="btn-tema-switch" type="button" onclick="alternarTema()"
+        class="flex items-center gap-3 bg-[#f2f6f4] border-2 border-emerald-700 rounded-full px-4 py-2 shadow-sm hover:shadow transition cursor-pointer">
+        <span id="icono-tema" class="text-xl leading-none">☀️</span>
+        <span id="texto-tema" class="text-sm font-extrabold text-emerald-900 uppercase tracking-wide">Modo Día</span>
+        <div id="pista-switch-tema" class="w-12 h-6 bg-slate-300 rounded-full p-0.5 flex items-center transition-colors duration-200">
+          <div id="circulo-switch-tema" class="w-5 h-5 bg-emerald-700 rounded-full shadow-md transform transition-transform duration-200 translate-x-0"></div>
+        </div>
+      </button>
+    </div>
 
     <!-- ========================================================= -->
     <!-- 1. PANTALLA PRINCIPAL (MENÚ DE INICIO)                    -->

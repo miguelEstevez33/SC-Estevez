@@ -8,7 +8,54 @@ let contadorFilasVenta = 0;
 let guardandoCierre = false;
 let ultimoInformeMensualCargado = null;
 
+// ==========================================
+// TEMA: MODO DÍA / MODO NOCTURNO
+// ==========================================
+function aplicarTema(esOscuro) {
+  const html = document.documentElement;
+  const icono = document.getElementById('icono-tema');
+  const texto = document.getElementById('texto-tema');
+  const pista = document.getElementById('pista-switch-tema');
+  const circulo = document.getElementById('circulo-switch-tema');
+
+  if (esOscuro) {
+    html.classList.add('dark');
+    if (icono) icono.textContent = '🌙';
+    if (texto) texto.textContent = 'Modo Nocturno';
+    if (pista) {
+      pista.classList.remove('bg-slate-300');
+      pista.classList.add('bg-emerald-900');
+    }
+    if (circulo) {
+      circulo.classList.remove('translate-x-0', 'bg-emerald-700');
+      circulo.classList.add('translate-x-6', 'bg-emerald-400');
+    }
+  } else {
+    html.classList.remove('dark');
+    if (icono) icono.textContent = '☀️';
+    if (texto) texto.textContent = 'Modo Día';
+    if (pista) {
+      pista.classList.remove('bg-emerald-900');
+      pista.classList.add('bg-slate-300');
+    }
+    if (circulo) {
+      circulo.classList.remove('translate-x-6', 'bg-emerald-400');
+      circulo.classList.add('translate-x-0', 'bg-emerald-700');
+    }
+  }
+}
+
+function alternarTema() {
+  const esOscuroActual = document.documentElement.classList.contains('dark');
+  const nuevoEstado = !esOscuroActual;
+  localStorage.setItem('tema_oscuro', nuevoEstado ? '1' : '0');
+  aplicarTema(nuevoEstado);
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
+  const temaGuardado = localStorage.getItem('tema_oscuro') === '1';
+  aplicarTema(temaGuardado);
+
   const hoy = new Date();
   const yyyy = hoy.getFullYear();
   const mm = String(hoy.getMonth() + 1).padStart(2, '0');
