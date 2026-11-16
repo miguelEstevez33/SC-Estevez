@@ -76,12 +76,26 @@ function formatoMoneda(num) {
 // ==========================================
 // GESTIÓN DE TANQUES Y PRECIOS
 // ==========================================
+function obtenerSurtidorGuardado(tanque) {
+  const rawLocal = localStorage.getItem(`surtidor_hist_${tanque.combustible}`);
+  const dbVal = Number(tanque.surtidor_actual || 0);
+  if (rawLocal !== null) {
+    return Number(rawLocal) || 0;
+  }
+  if (dbVal > 0) {
+    localStorage.setItem(`surtidor_hist_${tanque.combustible}`, String(dbVal));
+    return dbVal;
+  }
+  return 0;
+}
+
 async function cargarTanques() {
-  const res = await fetch('/api/tanques');
+  const res = await fetch(`/api/tanques?t=${Date.now()}`, { cache: 'no-store' });
   tanquesActuales = await res.json();
 
   tanquesActuales.forEach(t => {
     precios[t.combustible] = t.precio_litro;
+    t.surtidor_actual = obtenerSurtidorGuardado(t);
   });
 
   // 1. Resumen en Menú Principal
@@ -89,6 +103,7 @@ async function cargarTanques() {
   if (contInicio) {
     contInicio.innerHTML = tanquesActuales.map(t => {
       const bajo = t.litros_disponibles < 2000;
+      const numSurtidor = Number(t.surtidor_actual || 0);
       return `
         <div class="p-4 rounded-2xl border-2 ${bajo ? 'border-amber-600 bg-amber-100/80' : 'border-emerald-700/40 bg-[#e6eeea]'} flex justify-between items-center">
           <div>
@@ -96,6 +111,7 @@ async function cargarTanques() {
             <p class="text-3xl font-black ${bajo ? 'text-amber-800' : 'text-emerald-900'}">
               ${t.litros_disponibles.toLocaleString('es-AR', { minimumFractionDigits: 1 })} L
             </p>
+            <p class="text-xs font-bold text-slate-600 mt-1 font-mono">Surtidor: ${numSurtidor}</p>
           </div>
           <span class="text-sm font-bold text-slate-700">${formatoMoneda(t.precio_litro)}/L</span>
         </div>
@@ -103,8 +119,10 @@ async function cargarTanques() {
     }).join('');
   }
 
-  // 2. Etiquetas en Cerrar Caja
+  // 2. Etiquetas y Surtidores en Cerrar Caja
   const stockMap = Object.fromEntries(tanquesActuales.map(t => [t.combustible, t.litros_disponibles]));
+  const surtidorMap = Object.fromEntries(tanquesActuales.map(t => [t.combustible, Number(t.surtidor_actual || 0)]));
+
   document.getElementById('badge_precio_super').textContent = `${formatoMoneda(precios.Super)} / L`;
   document.getElementById('badge_precio_euro').textContent = `${formatoMoneda(precios.Euro)} / L`;
   document.getElementById('badge_precio_gasoil').textContent = `${formatoMoneda(precios.Gasoil)} / L`;
@@ -112,6 +130,10 @@ async function cargarTanques() {
   document.getElementById('disp_stock_super').textContent = `${(stockMap['Super'] || 0).toLocaleString('es-AR')} L`;
   document.getElementById('disp_stock_euro').textContent = `${(stockMap['Euro'] || 0).toLocaleString('es-AR')} L`;
   document.getElementById('disp_stock_gasoil').textContent = `${(stockMap['Gasoil'] || 0).toLocaleString('es-AR')} L`;
+
+  document.getElementById('surtidor_ant_super').value = surtidorMap['Super'] ?? 0;
+  document.getElementById('surtidor_ant_euro').value = surtidorMap['Euro'] ?? 0;
+  document.getElementById('surtidor_ant_gasoil').value = surtidorMap['Gasoil'] ?? 0;
 
   // 3. Tarjetas en Vista Cargar Tanque
   const panelGestion = document.getElementById('panel-gestion-tanques');
@@ -122,6 +144,7 @@ async function cargarTanques() {
           <h3 class="text-2xl font-black text-emerald-900 uppercase">${t.combustible}</h3>
           <p class="text-sm font-bold text-slate-600 mt-1">Stock actual en tanque:</p>
           <p class="text-4xl font-black text-slate-900 mt-1">${t.litros_disponibles.toLocaleString('es-AR', { minimumFractionDigits: 1 })} L</p>
+          <p class="text-xs font-bold text-emerald-800 mt-1 font-mono">Surtidor actual: ${Number(t.surtidor_actual || 0)}</p>
         </div>
 
         <div>
@@ -140,6 +163,18 @@ async function cargarTanques() {
           <button onclick="ajustarTanque('${t.combustible}', 'modificar')" class="bg-slate-700 hover:bg-slate-800 text-[#f2f6f4] font-black py-3 px-4 rounded-xl text-lg transition">
             = FIJAR STOCK EXACTO
           </button>
+        </div>
+
+        <div class="border-t-2 border-slate-300/60 pt-3 space-y-2">
+          <label class="block text-xs font-extrabold text-emerald-900 uppercase">Histórico Surtidor (6 dígitos):</label>
+          <div class="flex gap-2">
+            <input type="number" id="ajuste_surtidor_${t.combustible}" min="0" step="any" value="${Number(t.surtidor_actual || 0)}"
+              class="flex-1 bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-2.5 text-lg font-black text-right font-mono">
+            <button type="button" onclick="fijarSurtidorTanque('${t.combustible}')"
+              class="bg-emerald-800 hover:bg-emerald-900 text-[#f2f6f4] font-black px-4 py-2.5 rounded-xl text-sm transition shrink-0">
+              FIJAR
+            </button>
+          </div>
         </div>
       </div>
     `).join('');
@@ -181,6 +216,28 @@ async function ajustarTanque(combustible, operacion) {
     const err = await res.json();
     alert(err.error || 'Error al actualizar tanque');
   }
+}
+
+async function fijarSurtidorTanque(combustible) {
+  const input = document.getElementById(`ajuste_surtidor_${combustible}`);
+  const surtidor = parseFloat(input.value);
+
+  if (isNaN(surtidor) || surtidor < 0) {
+    return alert('Ingrese un número de surtidor válido (mayor o igual a 0).');
+  }
+
+  localStorage.setItem(`surtidor_hist_${combustible}`, String(surtidor));
+
+  try {
+    await fetch('/api/tanques/surtidor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ combustible, surtidor })
+    });
+  } catch (_) {}
+
+  await cargarTanques();
+  alert(`Histórico de surtidor de ${combustible} fijado en ${surtidor}.`);
 }
 
 async function guardarPrecios() {
@@ -392,6 +449,38 @@ function obtenerDetalleRendicion() {
 // ==========================================
 // CERRAR CAJA Y CÁLCULOS
 // ==========================================
+function calcularPorSurtidor(tipo) {
+  const inputAnt = document.getElementById(`surtidor_ant_${tipo}`);
+  const inputAct = document.getElementById(`surtidor_act_${tipo}`);
+  const inputLitros = document.getElementById(`litros_${tipo}`);
+  const infoEl = document.getElementById(`info_calculo_${tipo}`);
+
+  const strAct = inputAct.value.trim();
+  if (strAct === '') {
+    inputLitros.value = '';
+    infoEl.textContent = '';
+    infoEl.className = 'text-xs font-bold text-emerald-800 text-right min-h-[16px]';
+    recalcular();
+    return;
+  }
+
+  const ant = parseFloat(inputAnt.value) || 0;
+  const act = parseFloat(strAct) || 0;
+  const diff = Number((act - ant).toFixed(2));
+
+  if (diff < 0) {
+    inputLitros.value = 0;
+    infoEl.textContent = `⚠ Cierre actual (${act}) menor al anterior (${ant})`;
+    infoEl.className = 'text-xs font-extrabold text-red-700 text-right min-h-[16px]';
+  } else {
+    inputLitros.value = diff;
+    infoEl.textContent = `${act} - ${ant} = ${diff} L`;
+    infoEl.className = 'text-xs font-bold text-emerald-800 text-right min-h-[16px]';
+  }
+
+  recalcular();
+}
+
 function calcularValoresVenta() {
   const lSuper = val('litros_super');
   const lEuro = val('litros_euro');
@@ -447,6 +536,19 @@ async function guardarCierre() {
     r.efectivo + r.policia + r.comuna + r.bomberos + r.cooperativa + r.transferencia + r.otro
   ).toFixed(2));
 
+  const surtidorAntSuper = val('surtidor_ant_super');
+  const surtidorActSuper = val('surtidor_act_super');
+  const surtidorAntEuro = val('surtidor_ant_euro');
+  const surtidorActEuro = val('surtidor_act_euro');
+  const surtidorAntGasoil = val('surtidor_ant_gasoil');
+  const surtidorActGasoil = val('surtidor_act_gasoil');
+
+  if ((surtidorActSuper > 0 && surtidorActSuper < surtidorAntSuper) ||
+      (surtidorActEuro > 0 && surtidorActEuro < surtidorAntEuro) ||
+      (surtidorActGasoil > 0 && surtidorActGasoil < surtidorAntGasoil)) {
+    return alert('El número de cierre actual del surtidor no puede ser menor al histórico anterior.');
+  }
+
   const datos = {
     fecha: document.getElementById('fecha').value,
     litros_super: lSuper,
@@ -455,6 +557,12 @@ async function guardarCierre() {
     valor_euro: vEuro,
     litros_gasoil: lGasoil,
     valor_gasoil: vGasoil,
+    surtidor_ant_super: surtidorAntSuper,
+    surtidor_act_super: surtidorActSuper,
+    surtidor_ant_euro: surtidorAntEuro,
+    surtidor_act_euro: surtidorActEuro,
+    surtidor_ant_gasoil: surtidorAntGasoil,
+    surtidor_act_gasoil: surtidorActGasoil,
     total_venta: totalVenta,
     efectivo: r.efectivo,
     policia: r.policia,
@@ -489,10 +597,19 @@ async function guardarCierre() {
       return alert(`Error: ${resultado.error}`);
     }
 
+    if (surtidorActSuper > 0) localStorage.setItem('surtidor_hist_Super', String(surtidorActSuper));
+    if (surtidorActEuro > 0) localStorage.setItem('surtidor_hist_Euro', String(surtidorActEuro));
+    if (surtidorActGasoil > 0) localStorage.setItem('surtidor_hist_Gasoil', String(surtidorActGasoil));
+
     generarComprobantePDF(datos, resultado.id);
 
     await cargarTanques();
-    ['litros_super', 'litros_euro', 'litros_gasoil'].forEach(id => document.getElementById(id).value = '');
+    ['litros_super', 'litros_euro', 'litros_gasoil', 'surtidor_act_super', 'surtidor_act_euro', 'surtidor_act_gasoil'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    ['info_calculo_super', 'info_calculo_euro', 'info_calculo_gasoil'].forEach(id => {
+      document.getElementById(id).textContent = '';
+    });
 
     document.getElementById('lista-ventas-rendicion').innerHTML = '';
     agregarFilaVenta('Efectivo');
@@ -570,6 +687,13 @@ async function anularCierre(idCierre) {
       return alert(data.error || `Error del servidor (${res.status}). Asegúrese de reiniciar node server.js.`);
     }
 
+    const cierreAnulado = cierresUltimos7Dias.find(c => c.id === idCierre);
+    if (cierreAnulado) {
+      if (cierreAnulado.surtidor_act_super > 0) localStorage.setItem('surtidor_hist_Super', String(cierreAnulado.surtidor_ant_super || 0));
+      if (cierreAnulado.surtidor_act_euro > 0) localStorage.setItem('surtidor_hist_Euro', String(cierreAnulado.surtidor_ant_euro || 0));
+      if (cierreAnulado.surtidor_act_gasoil > 0) localStorage.setItem('surtidor_hist_Gasoil', String(cierreAnulado.surtidor_ant_gasoil || 0));
+    }
+
     await cargarTanques();
     await cargarInformesDiarios();
   } catch (err) {
@@ -626,16 +750,19 @@ function renderizarDetalleDia(fecha) {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-xl p-4 text-center">
             <h4 class="text-xl font-black text-emerald-900">Super</h4>
+            ${c.surtidor_act_super > 0 ? `<p class="text-xs font-mono font-bold text-slate-600 mt-1">Surtidor: ${c.surtidor_ant_super} → ${c.surtidor_act_super}</p>` : ''}
             <p class="text-slate-700 font-bold mt-2">L. venta: ${c.litros_super.toFixed(2)} L</p>
             <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(c.valor_super)}</p>
           </div>
           <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-xl p-4 text-center">
             <h4 class="text-xl font-black text-emerald-900">Euro</h4>
+            ${c.surtidor_act_euro > 0 ? `<p class="text-xs font-mono font-bold text-slate-600 mt-1">Surtidor: ${c.surtidor_ant_euro} → ${c.surtidor_act_euro}</p>` : ''}
             <p class="text-slate-700 font-bold mt-2">L. venta: ${c.litros_euro.toFixed(2)} L</p>
             <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(c.valor_euro)}</p>
           </div>
           <div class="bg-[#e6eeea] border-2 border-emerald-700/40 rounded-xl p-4 text-center">
             <h4 class="text-xl font-black text-emerald-900">Gasoil</h4>
+            ${c.surtidor_act_gasoil > 0 ? `<p class="text-xs font-mono font-bold text-slate-600 mt-1">Surtidor: ${c.surtidor_ant_gasoil} → ${c.surtidor_act_gasoil}</p>` : ''}
             <p class="text-slate-700 font-bold mt-2">L. venta: ${c.litros_gasoil.toFixed(2)} L</p>
             <p class="text-xl font-black text-slate-900 mt-1">${formatoMoneda(c.valor_gasoil)}</p>
           </div>
@@ -926,10 +1053,21 @@ function generarComprobantePDF(d, idCierre) {
   doc.text('Gasoil', 165, 56, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  if (Number(d.surtidor_act_super) > 0) {
+    doc.text(`Surt: ${d.surtidor_ant_super} -> ${d.surtidor_act_super}`, 45, 63, { align: 'center' });
+  }
+  if (Number(d.surtidor_act_euro) > 0) {
+    doc.text(`Surt: ${d.surtidor_ant_euro} -> ${d.surtidor_act_euro}`, 105, 63, { align: 'center' });
+  }
+  if (Number(d.surtidor_act_gasoil) > 0) {
+    doc.text(`Surt: ${d.surtidor_ant_gasoil} -> ${d.surtidor_act_gasoil}`, 165, 63, { align: 'center' });
+  }
+
   doc.setFontSize(11);
-  doc.text(`L. venta: ${Number(d.litros_super).toFixed(2)} L`, 45, 72, { align: 'center' });
-  doc.text(`L. venta: ${Number(d.litros_euro).toFixed(2)} L`, 105, 72, { align: 'center' });
-  doc.text(`L. venta: ${Number(d.litros_gasoil).toFixed(2)} L`, 165, 72, { align: 'center' });
+  doc.text(`L. venta: ${Number(d.litros_super).toFixed(2)} L`, 45, 73, { align: 'center' });
+  doc.text(`L. venta: ${Number(d.litros_euro).toFixed(2)} L`, 105, 73, { align: 'center' });
+  doc.text(`L. venta: ${Number(d.litros_gasoil).toFixed(2)} L`, 165, 73, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
   doc.text(`Valor: ${formatoMoneda(Number(d.valor_super))}`, 45, 89, { align: 'center' });

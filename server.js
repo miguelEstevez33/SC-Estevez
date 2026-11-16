@@ -19,6 +19,10 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 
 app.use(express.json());
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 1. Inicialización de tablas SQLite
@@ -53,6 +57,11 @@ db.exec(`
 `);
 
 // Migraciones automáticas sin perder datos existentes
+const columnasTanques = db.prepare("PRAGMA table_info(tanques)").all().map(c => c.name);
+if (!columnasTanques.includes('surtidor_actual')) {
+  db.exec("ALTER TABLE tanques ADD COLUMN surtidor_actual REAL NOT NULL DEFAULT 0");
+}
+
 const columnasCierres = db.prepare("PRAGMA table_info(cierres_caja)").all().map(c => c.name);
 if (!columnasCierres.includes('medios_extra')) {
   db.exec("ALTER TABLE cierres_caja ADD COLUMN medios_extra TEXT NOT NULL DEFAULT '[]'");
@@ -65,6 +74,24 @@ if (!columnasCierres.includes('bomberos')) {
 }
 if (!columnasCierres.includes('cooperativa')) {
   db.exec("ALTER TABLE cierres_caja ADD COLUMN cooperativa REAL NOT NULL DEFAULT 0");
+}
+if (!columnasCierres.includes('surtidor_ant_super')) {
+  db.exec("ALTER TABLE cierres_caja ADD COLUMN surtidor_ant_super REAL NOT NULL DEFAULT 0");
+}
+if (!columnasCierres.includes('surtidor_act_super')) {
+  db.exec("ALTER TABLE cierres_caja ADD COLUMN surtidor_act_super REAL NOT NULL DEFAULT 0");
+}
+if (!columnasCierres.includes('surtidor_ant_euro')) {
+  db.exec("ALTER TABLE cierres_caja ADD COLUMN surtidor_ant_euro REAL NOT NULL DEFAULT 0");
+}
+if (!columnasCierres.includes('surtidor_act_euro')) {
+  db.exec("ALTER TABLE cierres_caja ADD COLUMN surtidor_act_euro REAL NOT NULL DEFAULT 0");
+}
+if (!columnasCierres.includes('surtidor_ant_gasoil')) {
+  db.exec("ALTER TABLE cierres_caja ADD COLUMN surtidor_ant_gasoil REAL NOT NULL DEFAULT 0");
+}
+if (!columnasCierres.includes('surtidor_act_gasoil')) {
+  db.exec("ALTER TABLE cierres_caja ADD COLUMN surtidor_act_gasoil REAL NOT NULL DEFAULT 0");
 }
 
 const insertTanque = db.prepare('INSERT OR IGNORE INTO tanques (id, combustible, litros_disponibles, precio_litro) VALUES (?, ?, ?, ?)');
@@ -112,19 +139,47 @@ app.post('/api/tanques/ajustar', (req, res) => {
   res.json({ ok: true, tanques: db.prepare('SELECT * FROM tanques ORDER BY id').all() });
 });
 
+app.post('/api/tanques/surtidor', (req, res) => {
+  const { combustible, surtidor } = req.body;
+  const valor = Number(surtidor);
+
+  if (!combustible || isNaN(valor) || valor < 0) {
+    return res.status(400).json({ error: 'Número de surtidor inválido.' });
+  }
+
+  const tanque = db.prepare('SELECT id FROM tanques WHERE combustible = ?').get(combustible);
+  if (!tanque) return res.status(404).json({ error: 'Combustible no encontrado.' });
+
+  db.prepare('UPDATE tanques SET surtidor_actual = ? WHERE combustible = ?').run(Number(valor.toFixed(2)), combustible);
+  res.json({ ok: true, tanques: db.prepare('SELECT * FROM tanques ORDER BY id').all() });
+});
+
 app.post('/api/cierres', (req, res) => {
   const d = req.body;
   const comuna = Number(d.comuna || 0);
   const bomberos = Number(d.bomberos || 0);
   const cooperativa = Number(d.cooperativa || 0);
+  const surtidor_ant_super = Number(d.surtidor_ant_super || 0);
+  const surtidor_act_super = Number(d.surtidor_act_super || 0);
+  const surtidor_ant_euro = Number(d.surtidor_ant_euro || 0);
+  const surtidor_act_euro = Number(d.surtidor_act_euro || 0);
+  const surtidor_ant_gasoil = Number(d.surtidor_ant_gasoil || 0);
+  const surtidor_act_gasoil = Number(d.surtidor_act_gasoil || 0);
 
   const camposNumericos = [
     d.litros_super, d.valor_super, d.litros_euro, d.valor_euro,
     d.litros_gasoil, d.valor_gasoil, d.total_venta,
-    d.efectivo, d.policia, comuna, bomberos, cooperativa, d.transferencia, d.otro, d.total_normalizado
+    d.efectivo, d.policia, comuna, bomberos, cooperativa, d.transferencia, d.otro, d.total_normalizado,
+    surtidor_ant_super, surtidor_act_super, surtidor_ant_euro, surtidor_act_euro, surtidor_ant_gasoil, surtidor_act_gasoil
   ];
   if (camposNumericos.some(n => typeof n !== 'number' || isNaN(n) || n < 0)) {
     return res.status(400).json({ error: 'No se permiten valores negativos ni inválidos.' });
+  }
+
+  if ((surtidor_act_super > 0 && surtidor_act_super < surtidor_ant_super) ||
+      (surtidor_act_euro > 0 && surtidor_act_euro < surtidor_ant_euro) ||
+      (surtidor_act_gasoil > 0 && surtidor_act_gasoil < surtidor_ant_gasoil)) {
+    return res.status(400).json({ error: 'El número de cierre actual del surtidor no puede ser menor al histórico anterior.' });
   }
 
   const guardarCierreTx = db.transaction((datos) => {
@@ -141,8 +196,9 @@ app.post('/api/cierres', (req, res) => {
       INSERT INTO cierres_caja (
         fecha, litros_super, valor_super, litros_euro, valor_euro,
         litros_gasoil, valor_gasoil, total_venta, efectivo, policia,
-        comuna, bomberos, cooperativa, transferencia, otro, medios_extra, total_normalizado
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        comuna, bomberos, cooperativa, transferencia, otro, medios_extra, total_normalizado,
+        surtidor_ant_super, surtidor_act_super, surtidor_ant_euro, surtidor_act_euro, surtidor_ant_gasoil, surtidor_act_gasoil
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const info = insert.run(
@@ -153,13 +209,21 @@ app.post('/api/cierres', (req, res) => {
       datos.total_venta,
       datos.efectivo, datos.policia, comuna, bomberos, cooperativa, datos.transferencia, datos.otro,
       JSON.stringify(datos.medios_extra || []),
-      datos.total_normalizado
+      datos.total_normalizado,
+      surtidor_ant_super, surtidor_act_super,
+      surtidor_ant_euro, surtidor_act_euro,
+      surtidor_ant_gasoil, surtidor_act_gasoil
     );
 
     const updateTanque = db.prepare('UPDATE tanques SET litros_disponibles = ROUND(litros_disponibles - ?, 2) WHERE combustible = ?');
     updateTanque.run(datos.litros_super, 'Super');
     updateTanque.run(datos.litros_euro, 'Euro');
     updateTanque.run(datos.litros_gasoil, 'Gasoil');
+
+    const updateSurtidor = db.prepare('UPDATE tanques SET surtidor_actual = ? WHERE combustible = ?');
+    if (surtidor_act_super > 0) updateSurtidor.run(surtidor_act_super, 'Super');
+    if (surtidor_act_euro > 0) updateSurtidor.run(surtidor_act_euro, 'Euro');
+    if (surtidor_act_gasoil > 0) updateSurtidor.run(surtidor_act_gasoil, 'Gasoil');
 
     return info.lastInsertRowid;
   });
@@ -185,6 +249,17 @@ const handlerAnularCierre = (req, res) => {
     devolverTanque.run(cierre.litros_super, 'Super');
     devolverTanque.run(cierre.litros_euro, 'Euro');
     devolverTanque.run(cierre.litros_gasoil, 'Gasoil');
+
+    const revertirSurtidor = db.prepare('UPDATE tanques SET surtidor_actual = ? WHERE combustible = ? AND surtidor_actual = ?');
+    if (cierre.surtidor_act_super > 0) {
+      revertirSurtidor.run(cierre.surtidor_ant_super, 'Super', cierre.surtidor_act_super);
+    }
+    if (cierre.surtidor_act_euro > 0) {
+      revertirSurtidor.run(cierre.surtidor_ant_euro, 'Euro', cierre.surtidor_act_euro);
+    }
+    if (cierre.surtidor_act_gasoil > 0) {
+      revertirSurtidor.run(cierre.surtidor_ant_gasoil, 'Gasoil', cierre.surtidor_act_gasoil);
+    }
 
     db.prepare('DELETE FROM cierres_caja WHERE id = ?').run(id);
   });

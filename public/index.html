@@ -78,9 +78,30 @@
               <h3 class="text-2xl font-black text-emerald-900 uppercase">Super</h3>
               <span id="badge_precio_super" class="bg-emerald-700/15 text-emerald-950 font-extrabold px-3 py-1 rounded-lg text-sm">$ 0 / L</span>
             </div>
-            <p class="text-xs font-bold text-slate-600">Disponible: <span id="disp_stock_super">0 L</span></p>
+            <p class="text-xs font-bold text-slate-600">Disponible en tanque: <span id="disp_stock_super">0 L</span></p>
+
+            <!-- LECTURA DE SURTIDOR (6 DÍGITOS) -->
+            <div class="bg-[#dce6e1] border border-emerald-700/40 rounded-xl p-3 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold text-emerald-950 uppercase tracking-wide">Numerador Surtidor (6 dígitos)</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">ANTERIOR (Histórico)</label>
+                  <input type="number" step="any" min="0" id="surtidor_ant_super" oninput="calcularPorSurtidor('super')" placeholder="000000"
+                    class="w-full bg-[#eef3f0] border border-slate-400 focus:border-emerald-700 focus:outline-none rounded-lg p-2 text-lg font-bold text-right text-slate-700 font-mono">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-emerald-900 mb-1">CIERRE ACTUAL</label>
+                  <input type="number" step="any" min="0" id="surtidor_act_super" oninput="calcularPorSurtidor('super')" placeholder="Ej: 600100"
+                    class="w-full bg-[#f7faf8] border-2 border-emerald-700 focus:outline-none rounded-lg p-2 text-lg font-black text-right text-slate-900 font-mono">
+                </div>
+              </div>
+              <p id="info_calculo_super" class="text-xs font-bold text-emerald-800 text-right min-h-[16px]"></p>
+            </div>
+
             <div>
-              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros)</label>
+              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros Vendidos)</label>
               <input type="number" step="0.01" min="0" id="litros_super" oninput="recalcular()" placeholder="0.00"
                 class="w-full bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-bold text-right text-slate-900">
             </div>
@@ -96,9 +117,30 @@
               <h3 class="text-2xl font-black text-emerald-900 uppercase">Euro</h3>
               <span id="badge_precio_euro" class="bg-emerald-700/15 text-emerald-950 font-extrabold px-3 py-1 rounded-lg text-sm">$ 0 / L</span>
             </div>
-            <p class="text-xs font-bold text-slate-600">Disponible: <span id="disp_stock_euro">0 L</span></p>
+            <p class="text-xs font-bold text-slate-600">Disponible en tanque: <span id="disp_stock_euro">0 L</span></p>
+
+            <!-- LECTURA DE SURTIDOR (6 DÍGITOS) -->
+            <div class="bg-[#dce6e1] border border-emerald-700/40 rounded-xl p-3 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold text-emerald-950 uppercase tracking-wide">Numerador Surtidor (6 dígitos)</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">ANTERIOR (Histórico)</label>
+                  <input type="number" step="any" min="0" id="surtidor_ant_euro" oninput="calcularPorSurtidor('euro')" placeholder="000000"
+                    class="w-full bg-[#eef3f0] border border-slate-400 focus:border-emerald-700 focus:outline-none rounded-lg p-2 text-lg font-bold text-right text-slate-700 font-mono">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-emerald-900 mb-1">CIERRE ACTUAL</label>
+                  <input type="number" step="any" min="0" id="surtidor_act_euro" oninput="calcularPorSurtidor('euro')" placeholder="Ej: 600100"
+                    class="w-full bg-[#f7faf8] border-2 border-emerald-700 focus:outline-none rounded-lg p-2 text-lg font-black text-right text-slate-900 font-mono">
+                </div>
+              </div>
+              <p id="info_calculo_euro" class="text-xs font-bold text-emerald-800 text-right min-h-[16px]"></p>
+            </div>
+
             <div>
-              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros)</label>
+              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros Vendidos)</label>
               <input type="number" step="0.01" min="0" id="litros_euro" oninput="recalcular()" placeholder="0.00"
                 class="w-full bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-bold text-right text-slate-900">
             </div>
@@ -114,9 +156,30 @@
               <h3 class="text-2xl font-black text-emerald-900 uppercase">Gasoil</h3>
               <span id="badge_precio_gasoil" class="bg-emerald-700/15 text-emerald-950 font-extrabold px-3 py-1 rounded-lg text-sm">$ 0 / L</span>
             </div>
-            <p class="text-xs font-bold text-slate-600">Disponible: <span id="disp_stock_gasoil">0 L</span></p>
+            <p class="text-xs font-bold text-slate-600">Disponible en tanque: <span id="disp_stock_gasoil">0 L</span></p>
+
+            <!-- LECTURA DE SURTIDOR (6 DÍGITOS) -->
+            <div class="bg-[#dce6e1] border border-emerald-700/40 rounded-xl p-3 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-extrabold text-emerald-950 uppercase tracking-wide">Numerador Surtidor (6 dígitos)</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-600 mb-1">ANTERIOR (Histórico)</label>
+                  <input type="number" step="any" min="0" id="surtidor_ant_gasoil" oninput="calcularPorSurtidor('gasoil')" placeholder="000000"
+                    class="w-full bg-[#eef3f0] border border-slate-400 focus:border-emerald-700 focus:outline-none rounded-lg p-2 text-lg font-bold text-right text-slate-700 font-mono">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-extrabold text-emerald-900 mb-1">CIERRE ACTUAL</label>
+                  <input type="number" step="any" min="0" id="surtidor_act_gasoil" oninput="calcularPorSurtidor('gasoil')" placeholder="Ej: 600100"
+                    class="w-full bg-[#f7faf8] border-2 border-emerald-700 focus:outline-none rounded-lg p-2 text-lg font-black text-right text-slate-900 font-mono">
+                </div>
+              </div>
+              <p id="info_calculo_gasoil" class="text-xs font-bold text-emerald-800 text-right min-h-[16px]"></p>
+            </div>
+
             <div>
-              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros)</label>
+              <label class="block text-sm font-bold text-slate-700 mb-1">L. VENTA (Litros Vendidos)</label>
               <input type="number" step="0.01" min="0" id="litros_gasoil" oninput="recalcular()" placeholder="0.00"
                 class="w-full bg-[#f7faf8] border-2 border-slate-400 focus:border-emerald-700 focus:outline-none rounded-xl p-3 text-2xl font-bold text-right text-slate-900">
             </div>
